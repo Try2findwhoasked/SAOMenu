@@ -61,6 +61,7 @@ public final class SAOBossBanner {
 
     /** 是否 Boss 实体(tag 命中)。 */
     public static boolean isBoss(LivingEntity le) {
+        if (SAORewriteBridge.installed() && SAORewriteBridge.isBoss(le)) return true;
         return le.getType().is(net.minecraft.tags.TagKey.create(
                 net.minecraft.core.registries.Registries.ENTITY_TYPE,
                 new ResourceLocation(SAOMenu.MOD_ID, "boss")));

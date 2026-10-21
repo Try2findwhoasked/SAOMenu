@@ -331,11 +331,11 @@ public final class SAOHud {
 
     /** 升级 / 低血量检测:状态变化时推送 SAO 通知。 */
     private static void detectEvents(Player p) {
-        if (lastLevel >= 0 && p.experienceLevel > lastLevel) {
+        if (lastLevel >= 0 && (SAORewriteBridge.installed() ? SAORewriteBridge.level(p) : p.experienceLevel) > lastLevel) {
             SAONotification.push(tr("saomenu.notify.levelup.title"),
-                    tr("saomenu.notify.levelup.msg", p.experienceLevel));
+                    tr("saomenu.notify.levelup.msg", SAORewriteBridge.installed() ? SAORewriteBridge.level(p) : p.experienceLevel));
         }
-        lastLevel = p.experienceLevel;
+        lastLevel = SAORewriteBridge.installed() ? SAORewriteBridge.level(p) : p.experienceLevel;
         float hpNow = p.getHealth();
         if (lastHp >= 0f && hpNow < lastHp - 0.01f) {
             flashAt = net.minecraft.Util.getMillis();
@@ -542,7 +542,7 @@ public final class SAOHud {
                                    String name, Player p, float alpha) {
         float hp = p != null ? p.getHealth() : 20f;
         float maxHp = p != null ? p.getMaxHealth() : 20f;
-        int level = p != null ? p.experienceLevel : 1;
+        int level = SAORewriteBridge.installed() ? SAORewriteBridge.level(p) : p != null ? p.experienceLevel : 1;
         float frac = maxHp <= 0 ? 0f : Mth.clamp(hp / maxHp, 0f, 1f);
         // 所有像素坐标以贴图 360x83 为基准等比例缩放
         float s = w / 360f;
@@ -617,7 +617,7 @@ public final class SAOHud {
         // 5) 右下双格标签:左格"血量 / 上限"、右格"Lv:等级"(分隔线 x=305)
         int labelY = y + Math.round(71.5f * s) - 4;
         String hpText = trimHp(hp) + " / " + trimHp(maxHp);
-        String lvText = "Lv:" + level;
+        String lvText = "Lv:" + (level < 0 ? "--" : level);
         g.drawString(font, hpText,
                 x + Math.round(262.5f * s) - font.width(hpText) / 2, labelY,
                 mulAlpha(TEXT_DARK, alpha), false);

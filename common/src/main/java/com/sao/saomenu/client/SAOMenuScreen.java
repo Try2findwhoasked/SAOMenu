@@ -974,6 +974,10 @@ public class SAOMenuScreen extends Screen {
 
     /** 执行物品操作:0=装备(服务端换位) 1=信息弹窗 2=丢弃(服务端掉落)。 */
     private void executeItemAction(int b, MenuItem target) {
+        if (SAORewriteBridge.installed() && b != 1) {
+            SAORewriteBridge.open("equipment");
+            return;
+        }
         actionMenuOpen = false;
         if (b == 0) {
             new com.sao.saomenu.party.EquipItemC2S(target.invSlot()).sendToServer();
@@ -1405,8 +1409,12 @@ public class SAOMenuScreen extends Screen {
             if (hasHeld) {
                 stats.add(tr("saomenu.stat.held", held.getHoverName().getString()));
             }
-            stats.add(tr("saomenu.stat.level", p.experienceLevel));
-            stats.add(tr("saomenu.stat.experience", Math.round(p.experienceProgress * 100.0f)));
+            if (SAORewriteBridge.installed()) {
+                stats.addAll(SAORewriteBridge.profileRows().stream().limit(2).toList());
+            } else {
+                stats.add(tr("saomenu.stat.level", p.experienceLevel));
+                stats.add(tr("saomenu.stat.experience", Math.round(p.experienceProgress * 100.0f)));
+            }
             stats.add(tr("saomenu.stat.health", trim(p.getHealth()), trim(p.getMaxHealth())));
             if (statLines >= 8) {
                 stats.add(tr("saomenu.stat.hunger", p.getFoodData().getFoodLevel()));
@@ -1432,7 +1440,11 @@ public class SAOMenuScreen extends Screen {
         String subtitle = null;
         String footer = tr("saomenu.panel.team_members", 0);
         Player p = mc().player;
-        if (p != null && mc().level != null) {
+        if (SAORewriteBridge.installed()) {
+            rows.addAll(SAORewriteBridge.partyNames());
+            footer = tr("saomenu.panel.team_members", rows.size());
+            if (rows.isEmpty()) subtitle = tr("saomenu.panel.no_team");
+        } else if (p != null && mc().level != null) {
             PlayerTeam team = mc().level.getScoreboard().getPlayersTeam(p.getGameProfile().getName());
             if (team != null) {
                 title = team.getDisplayName().getString();
@@ -1451,7 +1463,10 @@ public class SAOMenuScreen extends Screen {
     private void renderFriendsCard(GuiGraphics g, int anchorY, float eased, float alpha) {
         List<String> rows = new ArrayList<>();
         int online = 0;
-        if (mc().getConnection() != null) {
+        if (SAORewriteBridge.installed()) {
+            rows.addAll(SAORewriteBridge.friendNames());
+            online = rows.size();
+        } else if (mc().getConnection() != null) {
             List<String> names = new ArrayList<>();
             for (PlayerInfo info : mc().getConnection().getOnlinePlayers()) {
                 names.add(info.getProfile().getName());
@@ -2110,6 +2125,17 @@ public class SAOMenuScreen extends Screen {
     }
 
     private void runAction(Action action) {
+        if (SAORewriteBridge.installed()) {
+            switch (action) {
+                case SKILL -> { SAORewriteBridge.open("skills"); return; }
+                case SWITCH_PARTY -> { SAORewriteBridge.open("party"); return; }
+                case SWITCH_FRIENDS -> { SAORewriteBridge.open("friends"); return; }
+                case SHOW_EQUIP, DUAL_WIELD -> { SAORewriteBridge.open("equipment"); return; }
+                case INVITE_PLAYER -> { SAORewriteBridge.invite(lastClickedLabel); return; }
+                case LEAVE_TEAM -> { SAORewriteBridge.leave(); return; }
+                default -> { }
+            }
+        }
         // INVITE_PLAYER 需要 label(玩家名),由点击处先记下再进来
         switch (action) {
             case SKILL -> {

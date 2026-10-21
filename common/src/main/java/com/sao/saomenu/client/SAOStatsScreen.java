@@ -54,6 +54,9 @@ public class SAOStatsScreen extends Screen {
     @Override
     protected void init() {
         rows.clear();
+        if (SAORewriteBridge.installed()) {
+            for (String line : SAORewriteBridge.profileRows()) rows.add(new String[]{"RPG", line});
+        }
         for (Attribute a : ATTRIBUTES) {
             // 平台未注册的属性跳过(Fabric 1.20.1 无 attack_knockback,Forge 有)
             if (player.getAttribute(a) == null) {
