@@ -751,6 +751,7 @@ public final class SAOMenuPreview {
                     var id = net.minecraft.core.registries.BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
                     if (id.getNamespace().equals("saomod_rewrite")) {
                         SAOMenu.LOGGER.info("[SAOMenu] rewrite creative tab {} count={}", id, tab.getDisplayItems().size());
+                        if (id.getPath().equals("weapons")) writeWeaponManifest(tab, out);
                     }
                 }
                 grab(client, out, "rewrite_creative_inventory.png");
@@ -761,8 +762,32 @@ public final class SAOMenuPreview {
                     releaseScreen(client, (client.screen.width - 195) / 2 + 42,
                             (client.screen.height - 136) / 2 - 16, 0);
                 }
+                moveCursorTo(client, 4, 4);
             } else if (menuTicks == 520) {
                 grab(client, out, "rewrite_creative_weapons.png");
+            } else if (menuTicks == 532) {
+                scrollScreen(client, client.screen.width / 2.0, client.screen.height / 2.0, -20);
+            } else if (menuTicks == 540) {
+                grab(client, out, "rewrite_creative_weapons_last.png");
+            } else if (menuTicks == 548) {
+                client.setScreen(null);
+                client.player.connection.sendCommand("saomod weapon acgselect");
+            } else if (menuTicks == 560) {
+                SAORewriteBridge.open("weapons");
+            } else if (menuTicks == 580) {
+                try {
+                    var state = Class.forName("cn.saomod.rewrite.infrastructure.network.WeaponMenuClientState");
+                    var snapshot = ((java.util.Optional<?>) state.getMethod("snapshot").invoke(null)).orElseThrow();
+                    if (!(Boolean) snapshot.getClass().getMethod("fusionSupported").invoke(snapshot)
+                            || (Integer) snapshot.getClass().getMethod("fusionOption").invoke(snapshot) != 1) {
+                        throw new IllegalStateException("Fusion selection did not reach menu snapshot");
+                    }
+                    SAOMenu.LOGGER.info("[SAOMenu] rewrite fusion option synchronized {}", snapshot);
+                } catch (ReflectiveOperationException failure) {
+                    throw new IllegalStateException("Cannot inspect rewrite fusion snapshot", failure);
+                }
+                grab(client, out, "rewrite_fusion_skills.png");
+            } else if (menuTicks == 588) {
                 done = true;
                 client.stop();
             }
@@ -857,6 +882,30 @@ public final class SAOMenuPreview {
             SAOMenu.LOGGER.info("[SAOMenu] preview written to {}", file.toAbsolutePath());
         } catch (IOException e) {
             SAOMenu.LOGGER.error("[SAOMenu] preview failed", e);
+        }
+    }
+
+    private static void writeWeaponManifest(net.minecraft.world.item.CreativeModeTab tab, String out) {
+        var entries = new com.google.gson.JsonArray();
+        for (var stack : tab.getDisplayItems()) {
+            var entry = new com.google.gson.JsonObject();
+            entry.addProperty("id", net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+            entry.addProperty("name", stack.getHoverName().getString());
+            entry.addProperty("durability", stack.getMaxDamage());
+            if (stack.getItem() instanceof net.minecraft.world.item.SwordItem) {
+                var modifiers = stack.getAttributeModifiers(net.minecraft.world.entity.EquipmentSlot.MAINHAND);
+                entry.addProperty("totalDamage", 1 + modifiers.get(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE)
+                        .stream().mapToDouble(value -> value.getAmount()).sum());
+                entry.addProperty("attackSpeed", 4 + modifiers.get(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_SPEED)
+                        .stream().mapToDouble(value -> value.getAmount()).sum());
+            }
+            entries.add(entry);
+        }
+        try {
+            Files.writeString(Path.of(out, "weapon_inventory.json"),
+                    new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(entries));
+        } catch (IOException failure) {
+            throw new IllegalStateException("Cannot write actual creative weapon inventory", failure);
         }
     }
 }
