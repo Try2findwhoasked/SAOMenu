@@ -770,10 +770,13 @@ public final class SAOMenuPreview {
             } else if (menuTicks == 540) {
                 grab(client, out, "rewrite_creative_weapons_last.png");
             } else if (menuTicks == 548) {
-                client.setScreen(null);
-                client.player.connection.sendCommand("saomod weapon acgselect");
-            } else if (menuTicks == 560) {
                 SAORewriteBridge.open("weapons");
+            } else if (menuTicks == 560) {
+                var fusion = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .filter(value -> value.getY() == 24).findFirst().orElseThrow();
+                fusion.onPress();
             } else if (menuTicks == 580) {
                 try {
                     var state = Class.forName("cn.saomod.rewrite.infrastructure.network.WeaponMenuClientState");
