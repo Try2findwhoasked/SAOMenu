@@ -43,6 +43,7 @@ public final class SAOMenuPreview {
     private static boolean done = false;
     private static boolean langSwitched = false;
     private static boolean langReloadDone = false;
+    private static String weaponQuickBefore;
 
     private SAOMenuPreview() {
     }
@@ -631,6 +632,12 @@ public final class SAOMenuPreview {
                     GLFW.GLFW_KEY_F5, 0, GLFW.GLFW_RELEASE, 0);
             closeScreen(client);
             client.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+            if (SAORewriteBridge.installed() && client.getWindow().getWidth() >= 1280) {
+                client.options.guiScale().set(2);
+                client.resizeDisplay();
+                client.getTutorial().setStep(net.minecraft.client.tutorial.TutorialSteps.NONE);
+                client.getToasts().clear();
+            }
             if (!SAORewriteBridge.installed()) {
                 done = true;
                 client.stop();
@@ -710,6 +717,52 @@ public final class SAOMenuPreview {
                 SAOMenu.LOGGER.info("[SAOMenu] rewrite profession selected through UI rows={}", rows);
                 grab(client, out, "rewrite_skills_selected.png");
             } else if (menuTicks == 440) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:northern_icebow");
+            } else if (menuTicks == 452) {
+                SAORewriteBridge.open("weapons");
+            } else if (menuTicks == 464) {
+                if (client.screen == null || !client.screen.getClass().getSimpleName().equals("WeaponSkillsScreen")) {
+                    throw new IllegalStateException("Weapon arts page did not open");
+                }
+                var quick = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .filter(value -> value.getMessage().getString().startsWith("Z"))
+                        .findFirst().orElseThrow();
+                weaponQuickBefore = quick.getMessage().getString();
+                quick.onPress();
+            } else if (menuTicks == 480) {
+                boolean updated = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .anyMatch(value -> value.getMessage().getString().startsWith("Z")
+                                && !value.getMessage().getString().equals(weaponQuickBefore));
+                if (!updated) throw new IllegalStateException("Weapon quick binding did not update through UI");
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite weapon arts and shortcut rebinding verified");
+                grab(client, out, "rewrite_weapon_skills.png");
+            } else if (menuTicks == 500) {
+                client.setScreen(new net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen(
+                        client.player, client.player.connection.enabledFeatures(), true));
+            } else if (menuTicks == 512) {
+                var items = net.minecraft.core.registries.BuiltInRegistries.ITEM.keySet().stream()
+                        .filter(id -> id.getNamespace().equals("saomod_rewrite")).sorted().toList();
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite registered items count={} ids={}", items.size(), items);
+                for (var tab : net.minecraft.core.registries.BuiltInRegistries.CREATIVE_MODE_TAB) {
+                    var id = net.minecraft.core.registries.BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
+                    if (id.getNamespace().equals("saomod_rewrite")) {
+                        SAOMenu.LOGGER.info("[SAOMenu] rewrite creative tab {} count={}", id, tab.getDisplayItems().size());
+                    }
+                }
+                grab(client, out, "rewrite_creative_inventory.png");
+                if (net.minecraft.core.registries.BuiltInRegistries.CREATIVE_MODE_TAB.containsKey(
+                        new net.minecraft.resources.ResourceLocation("saomod_rewrite", "catalog"))) {
+                    clickScreen(client, (client.screen.width - 195) / 2 + 42,
+                            (client.screen.height - 136) / 2 - 16, 0);
+                    releaseScreen(client, (client.screen.width - 195) / 2 + 42,
+                            (client.screen.height - 136) / 2 - 16, 0);
+                }
+            } else if (menuTicks == 520) {
+                grab(client, out, "rewrite_creative_weapons.png");
                 done = true;
                 client.stop();
             }

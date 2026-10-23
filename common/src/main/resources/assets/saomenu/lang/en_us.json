@@ -143,5 +143,6 @@
   "saomenu.menu.rpg_progression": "Progression",
   "saomenu.menu.rpg_party": "Manage party",
   "saomenu.menu.rpg_friends": "Manage friends",
-  "saomenu.panel.friend_count": "Friends: {0}"
+  "saomenu.panel.friend_count": "Friends: {0}",
+  "saomenu.menu.weapon_skills": "Weapon Arts"
 }

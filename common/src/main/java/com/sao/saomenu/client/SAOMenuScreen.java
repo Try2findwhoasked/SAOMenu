@@ -88,7 +88,7 @@ public class SAOMenuScreen extends Screen {
     private enum Action {
         NONE, OPEN_OPTIONS, OPEN_CONFIG, OPEN_STATS, OPEN_ADVANCEMENTS, CLOSE,
         SWITCH_FRIENDS, SWITCH_PARTY, SHOW_EQUIP, SHOW_ITEMS, INVITE_PLAYER, LEAVE_TEAM, TOGGLE_MAP, SKILL,
-        DUAL_WIELD, OPEN_RPG, OPEN_PROGRESSION
+        DUAL_WIELD, OPEN_RPG, OPEN_PROGRESSION, OPEN_WEAPONS
     }
 
     /** 装备条目分类(第三列展示哪一栏装备)。 */
@@ -332,9 +332,10 @@ public class SAOMenuScreen extends Screen {
         if (SAORewriteBridge.installed()) {
             switch (MAIN_BUTTONS[main].kind()) {
                 case PROFILE -> {
-                    items = java.util.Arrays.copyOf(items, items.length + 2);
+                    items = java.util.Arrays.copyOf(items, items.length + 3);
                     items[0] = new MenuItem("saomenu.menu.skill", "item_status", Action.SKILL);
                     items[1] = new MenuItem("saomenu.menu.equip", "item_weapon", Action.SHOW_EQUIP);
+                    items[items.length - 3] = new MenuItem("saomenu.menu.weapon_skills", "item_weapon", Action.OPEN_WEAPONS);
                     items[items.length - 2] = new MenuItem("saomenu.menu.rpg_progression", "item_map", Action.OPEN_PROGRESSION);
                     items[items.length - 1] = new MenuItem("saomenu.menu.rpg_features", "item_status", Action.OPEN_RPG);
                 }
@@ -2149,6 +2150,7 @@ public class SAOMenuScreen extends Screen {
     private void runAction(Action action) {
         if (SAORewriteBridge.installed()) {
             switch (action) {
+                case OPEN_WEAPONS -> { SAORewriteBridge.open("weapons"); return; }
                 case OPEN_RPG -> { SAORewriteBridge.open("menu"); return; }
                 case OPEN_PROGRESSION -> { SAORewriteBridge.open("progression"); return; }
                 case SKILL -> { SAORewriteBridge.open("skills"); return; }
