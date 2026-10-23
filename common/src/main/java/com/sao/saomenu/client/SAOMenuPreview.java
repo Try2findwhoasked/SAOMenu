@@ -630,8 +630,89 @@ public final class SAOMenuPreview {
             client.keyboardHandler.keyPress(client.getWindow().getWindow(),
                     GLFW.GLFW_KEY_F5, 0, GLFW.GLFW_RELEASE, 0);
             closeScreen(client);
-            done = true;
-            client.stop();
+            client.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+            if (!SAORewriteBridge.installed()) {
+                done = true;
+                client.stop();
+            }
+        }
+        if (SAORewriteBridge.installed() && menuTicks >= 200) {
+            String[] pages = {"party", "friends", "equipment", "skills", "progression", "menu"};
+            String[] screens = {"PartyScreen", "FriendScreen", "EquipmentScreen", "ProfessionBindingScreen", "ProgressionScreen", "RpgMenuScreen"};
+            int index = (menuTicks - 200) / 12;
+            int phase = (menuTicks - 200) % 12;
+            if (index < pages.length) {
+                if (phase == 0) SAORewriteBridge.open(pages[index]);
+                if (phase == 10) {
+                    String actual = client.screen == null ? "null" : client.screen.getClass().getSimpleName();
+                    if (!screens[index].equals(actual)) throw new IllegalStateException("Rewrite page did not open: " + pages[index] + " / " + actual);
+                    SAOMenu.LOGGER.info("[SAOMenu] rewrite page {} -> {} rows={}", pages[index], actual, SAORewriteBridge.profileRows());
+                    grab(client, out, "rewrite_" + pages[index] + ".png");
+                }
+            } else if (menuTicks == 272) {
+                client.setScreen(new SAOMenuScreen());
+            } else if (menuTicks == 280) {
+                int w = client.getWindow().getGuiScaledWidth();
+                int h = client.getWindow().getGuiScaledHeight();
+                clickScreen(client, MenuLayout.firstButtonCenterX(w), MenuLayout.buttonCenterY(h, 0), 0);
+            } else if (menuTicks == 288) {
+                grab(client, out, "rewrite_native_menu.png");
+            } else if (menuTicks == 292) {
+                closeScreen(client);
+                client.player.connection.sendCommand("item replace entity @s hotbar.8 with minecraft:diamond_helmet");
+            } else if (menuTicks == 304) {
+                var expected = client.player.getInventory().getItem(8).copy();
+                if (!expected.is(net.minecraft.world.item.Items.DIAMOND_HELMET)
+                        || !SAORewriteBridge.equip(8, expected)) {
+                    throw new IllegalStateException("Rewrite menu equip rejected current inventory item");
+                }
+            } else if (menuTicks == 316) {
+                if (!client.player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                        .is(net.minecraft.world.item.Items.DIAMOND_HELMET)) {
+                    throw new IllegalStateException("Rewrite menu equip did not reach server");
+                }
+                client.player.connection.sendCommand("item replace entity @s hotbar.8 with minecraft:apple 3");
+            } else if (menuTicks == 328) {
+                var expected = client.player.getInventory().getItem(8).copy();
+                if (!expected.is(net.minecraft.world.item.Items.APPLE) || expected.getCount() != 3
+                        || SAORewriteBridge.drop(8, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STONE))
+                        || !SAORewriteBridge.drop(8, expected)) {
+                    throw new IllegalStateException("Rewrite menu drop did not validate inventory");
+                }
+            } else if (menuTicks == 340) {
+                if (!client.player.getInventory().getItem(8).isEmpty()) {
+                    throw new IllegalStateException("Rewrite menu drop did not remove stack");
+                }
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite inventory equip/drop verified, stale action rejected");
+                SAORewriteBridge.open("friends");
+            } else if (menuTicks == 352) {
+                var input = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.EditBox)
+                        .map(value -> (net.minecraft.client.gui.components.EditBox) value).findFirst().orElseThrow();
+                clickScreen(client, input.getX() + 4, input.getY() + 4, 0);
+                client.screen.charTyped('D', 0);
+            } else if (menuTicks == 392) {
+                client.screen.charTyped('e', 0);
+                var input = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.EditBox)
+                        .map(value -> (net.minecraft.client.gui.components.EditBox) value).findFirst().orElseThrow();
+                if (!input.getValue().equals("De")) throw new IllegalStateException("Friend input lost focus after refresh");
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite friend input retained across snapshot refresh");
+                grab(client, out, "rewrite_friends_input.png");
+            } else if (menuTicks == 400) {
+                SAORewriteBridge.open("skills");
+            } else if (menuTicks == 412) {
+                int w = client.screen.width;
+                clickScreen(client, (w - Math.min(550, w - 24)) / 2 + 20, 70, 0);
+            } else if (menuTicks == 432) {
+                var rows = SAORewriteBridge.profileRows();
+                if (rows.size() < 3 || rows.get(2).equals("--")) throw new IllegalStateException("Profession selection did not reach server");
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite profession selected through UI rows={}", rows);
+                grab(client, out, "rewrite_skills_selected.png");
+            } else if (menuTicks == 440) {
+                done = true;
+                client.stop();
+            }
         }
     }
 

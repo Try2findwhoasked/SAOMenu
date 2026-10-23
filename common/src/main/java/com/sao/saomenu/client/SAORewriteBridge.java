@@ -3,6 +3,7 @@ package com.sao.saomenu.client;
 import dev.architectury.platform.Platform;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -47,6 +48,12 @@ public final class SAORewriteBridge {
     public static void open(String page) { call("open", new Class<?>[] {String.class}, page); }
     public static void invite(String player) { call("invite", new Class<?>[] {String.class}, player); }
     public static void leave() { call("leave", new Class<?>[0]); }
+    public static boolean equip(int slot, ItemStack expected) {
+        return Boolean.TRUE.equals(call("equip", new Class<?>[] {int.class, ItemStack.class}, slot, expected));
+    }
+    public static boolean drop(int slot, ItemStack expected) {
+        return Boolean.TRUE.equals(call("drop", new Class<?>[] {int.class, ItemStack.class}, slot, expected));
+    }
     public static boolean isBoss(Entity entity) {
         return Boolean.TRUE.equals(call("isBoss", new Class<?>[] {Entity.class}, entity));
     }
