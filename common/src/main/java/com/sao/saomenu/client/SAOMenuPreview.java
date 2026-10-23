@@ -791,6 +791,59 @@ public final class SAOMenuPreview {
                 }
                 grab(client, out, "rewrite_fusion_skills.png");
             } else if (menuTicks == 588) {
+                if (!Boolean.getBoolean("saomenu.combatPreview")) {
+                    done = true;
+                    client.stop();
+                } else {
+                    client.setScreen(null);
+                    client.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+                    client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:elucidator");
+                }
+            } else if (menuTicks == 600) {
+                client.player.connection.sendCommand("saomod weapon acg");
+            } else if (menuTicks == 606) {
+                grab(client, out, "rewrite_judgement_charge.png");
+            } else if (menuTicks == 620) {
+                client.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
+            } else if (menuTicks == 626) {
+                grab(client, out, "rewrite_judgement_finish.png");
+            } else if (menuTicks == 640) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:northern_icebow");
+            } else if (menuTicks == 650) {
+                client.player.setXRot(8);
+                client.options.keyUse.setDown(true);
+                client.gameMode.useItem(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
+            } else if (menuTicks == 674) {
+                client.options.keyUse.setDown(false);
+                client.gameMode.releaseUsingItem(client.player);
+            } else if (menuTicks == 678) {
+                grab(client, out, "rewrite_icebow_launch.png");
+            } else if (menuTicks == 688) {
+                grab(client, out, "rewrite_icebow_trail.png");
+            } else if (menuTicks == 710) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:elucidator");
+                client.player.connection.sendCommand("saomod profession cast 2");
+            } else if (menuTicks == 722) {
+                grab(client, out, "rewrite_warrior_charge.png");
+            } else if (menuTicks == 735) {
+                grab(client, out, "rewrite_warrior_release_early.png");
+            } else if (menuTicks == 738) {
+                grab(client, out, "rewrite_warrior_release_swing.png");
+            } else if (menuTicks == 742) {
+                grab(client, out, "rewrite_warrior_release.png");
+            } else if (menuTicks == 940) {
+                client.player.connection.sendCommand("saomod profession select saomod_rewrite:mage");
+            } else if (menuTicks == 964) {
+                if (!SAORewriteBridge.profileRows().get(2).contains("魔术师")) {
+                    throw new IllegalStateException("Mage selection did not reach server after recovery");
+                }
+            } else if (menuTicks == 976) {
+                client.player.connection.sendCommand("saomod profession cast 1");
+            } else if (menuTicks == 980) {
+                grab(client, out, "rewrite_mage_fireball.png");
+            } else if (menuTicks == 992) {
+                grab(client, out, "rewrite_mage_explosion.png");
+            } else if (menuTicks == 1020) {
                 done = true;
                 client.stop();
             }
