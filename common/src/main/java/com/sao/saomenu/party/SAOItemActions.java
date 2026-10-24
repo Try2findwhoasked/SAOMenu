@@ -20,6 +20,7 @@ public final class SAOItemActions {
 
     /** 装备背包槽位(0-35)的物品。 */
     public static void handleEquip(MinecraftServer server, ServerPlayer player, int slot) {
+        if (dev.architectury.platform.Platform.isModLoaded("saomod_rewrite")) return;
         if (slot < 0 || slot >= 36) {
             return;
         }
@@ -66,6 +67,7 @@ public final class SAOItemActions {
 
     /** 丢弃背包槽位(0-35)的物品。 */
     public static void handleDrop(MinecraftServer server, ServerPlayer player, int slot, boolean all) {
+        if (dev.architectury.platform.Platform.isModLoaded("saomod_rewrite")) return;
         if (slot < 0 || slot >= 36) {
             return;
         }
@@ -91,6 +93,7 @@ public final class SAOItemActions {
      * 副手原有物品退回背包(放不下掉地上)。</p>
      */
     public static void handleDualWield(ServerPlayer player, int mainSlot, int offSlot) {
+        if (dev.architectury.platform.Platform.isModLoaded("saomod_rewrite")) return;
         final int OFFHAND = -2;
         boolean mainAlready = mainSlot == OFFHAND;
         boolean offAlready = offSlot == OFFHAND;

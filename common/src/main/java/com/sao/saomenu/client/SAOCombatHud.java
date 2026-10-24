@@ -72,7 +72,7 @@ public final class SAOCombatHud {
         Vec3 camPos = mc.gameRenderer.getMainCamera().getPosition();
         Map<Integer, Float> seen = new HashMap<>();
         for (Entity e : mc.level.entitiesForRendering()) {
-            if (!(e instanceof LivingEntity le) || !le.isAlive() || le == p) {
+            if (!(e instanceof LivingEntity le) || !le.isAlive() || !le.isAttackable() || le == p) {
                 continue;
             }
             if (le.distanceToSqr(camPos) > TRACK_RANGE * TRACK_RANGE) {

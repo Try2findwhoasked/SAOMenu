@@ -1,5 +1,19 @@
 # SAO Menu(SAO 菜单)
 
+## beta1.1 · SAOMOD Rewrite 集成分支
+
+本仓库 fork 自 [ovo669/SAOMenu](https://github.com/ovo669/SAOMenu)，用于维护
+[SAOMOD Rewrite](https://github.com/Try2findwhoasked/SAOMOD-REWRITE) 的可选客户端菜单。
+发布标签 `beta1.1`，内部版本 `1.0.0-beta.1.1`；本轮只发布 Minecraft 1.20.1 Forge 构建。
+
+职业、装备、队伍、好友、成长和武器剑技入口连接服务器权威数据；队友血条使用远距健康、
+濒死、距离及维度快照。功能页跟随菜单强调色。保留原生圆形菜单及独立运行能力。
+
+客户端安装 `saomenu-forge-1.0.0-beta.1.1.jar`，配套使用重写版 beta1.1 与既有依赖；
+服务器不安装本菜单。开发用 `dev-shadow` JAR 不用于正式安装。
+本轮验证包含 111 项 common 测试和 Forge 重映射构建；集成客户端验证两种窗口尺寸的
+28 张页面截图、键盘编辑、16 选项分页和返回菜单。正式双客户端联机及完整字体/缩放矩阵待验收。
+
 SAO Utils 风格的圆形菜单界面模组 · Minecraft 1.20.1 · Architectury(Forge + Fabric)
 
 按 **O** 键(默认,可在按键设置改)打开刀剑神域风格的悬浮菜单:

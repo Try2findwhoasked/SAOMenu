@@ -88,7 +88,7 @@ public class SAOMenuScreen extends Screen {
     private enum Action {
         NONE, OPEN_OPTIONS, OPEN_CONFIG, OPEN_STATS, OPEN_ADVANCEMENTS, CLOSE,
         SWITCH_FRIENDS, SWITCH_PARTY, SHOW_EQUIP, SHOW_ITEMS, INVITE_PLAYER, LEAVE_TEAM, TOGGLE_MAP, SKILL,
-        DUAL_WIELD
+        DUAL_WIELD, OPEN_RPG, OPEN_PROGRESSION, OPEN_WEAPONS
     }
 
     /** 装备条目分类(第三列展示哪一栏装备)。 */
@@ -315,19 +315,38 @@ public class SAOMenuScreen extends Screen {
         // 队伍面板:「邀请玩家」展开在线玩家列(动态 children)
         if (MAIN_BUTTONS[main].kind() == MainButton.Kind.PARTY && items == PARTY_ITEMS) {
             if (expandedItem == 0) {
-                return partyItemsWithInviteChildren();
+                items = partyItemsWithInviteChildren();
+            } else {
+                // 未展开时还原静态定义(清掉上一帧缓存的 children)
+                PARTY_ITEMS[0] = new MenuItem("saomenu.menu.invite", "item_status", Action.NONE);
             }
-            // 未展开时还原静态定义(清掉上一帧缓存的 children)
-            PARTY_ITEMS[0] = new MenuItem("saomenu.menu.invite", "item_status", Action.NONE);
         }
         // 个人面板:「物品」展开背包条目列(动态 children,SAO 菜单条目样式)
         if (MAIN_BUTTONS[main].kind() == MainButton.Kind.PROFILE && items == PROFILE_ITEMS) {
             if (expandedItem == 2) {
-                return profileItemsWithInvChildren();
+                items = profileItemsWithInvChildren();
+            } else {
+                PROFILE_ITEMS[2] = new MenuItem("saomenu.menu.items", "item_bag", Action.SHOW_ITEMS);
             }
-            // 未展开时还原静态定义;action 必须保持 SHOW_ITEMS,
-            // 否则点击分支认不出该项可展开(表现为点了没反应)
-            PROFILE_ITEMS[2] = new MenuItem("saomenu.menu.items", "item_bag", Action.SHOW_ITEMS);
+        }
+        if (SAORewriteBridge.installed()) {
+            switch (MAIN_BUTTONS[main].kind()) {
+                case PROFILE -> {
+                    items = java.util.Arrays.copyOf(items, items.length + 3);
+                    items[0] = new MenuItem("saomenu.menu.skill", "item_status", Action.SKILL);
+                    items[1] = new MenuItem("saomenu.menu.equip", "item_weapon", Action.SHOW_EQUIP);
+                    items[items.length - 3] = new MenuItem("saomenu.menu.weapon_skills", "item_weapon", Action.OPEN_WEAPONS);
+                    items[items.length - 2] = new MenuItem("saomenu.menu.rpg_progression", "item_map", Action.OPEN_PROGRESSION);
+                    items[items.length - 1] = new MenuItem("saomenu.menu.rpg_features", "item_status", Action.OPEN_RPG);
+                }
+                case PARTY -> items = new MenuItem[] {
+                        new MenuItem("saomenu.menu.rpg_party", "item_status", Action.SWITCH_PARTY),
+                        new MenuItem("saomenu.menu.leave_team", "item_bag", Action.LEAVE_TEAM)};
+                case FRIENDS -> items = new MenuItem[] {
+                        new MenuItem("saomenu.menu.rpg_friends", "item_status", Action.SWITCH_FRIENDS),
+                        new MenuItem("saomenu.menu.refresh", "item_bag", Action.SWITCH_FRIENDS)};
+                default -> { }
+            }
         }
         return items;
     }
@@ -974,6 +993,14 @@ public class SAOMenuScreen extends Screen {
 
     /** 执行物品操作:0=装备(服务端换位) 1=信息弹窗 2=丢弃(服务端掉落)。 */
     private void executeItemAction(int b, MenuItem target) {
+        if (SAORewriteBridge.installed() && b != 1) {
+            boolean sent = b == 0 ? SAORewriteBridge.equip(target.invSlot(), target.stack())
+                    : SAORewriteBridge.drop(target.invSlot(), target.stack());
+            actionMenuOpen = false;
+            invChildrenCacheAt = 0;
+            if (sent) playClick();
+            return;
+        }
         actionMenuOpen = false;
         if (b == 0) {
             new com.sao.saomenu.party.EquipItemC2S(target.invSlot()).sendToServer();
@@ -1405,8 +1432,12 @@ public class SAOMenuScreen extends Screen {
             if (hasHeld) {
                 stats.add(tr("saomenu.stat.held", held.getHoverName().getString()));
             }
-            stats.add(tr("saomenu.stat.level", p.experienceLevel));
-            stats.add(tr("saomenu.stat.experience", Math.round(p.experienceProgress * 100.0f)));
+            if (SAORewriteBridge.installed()) {
+                stats.addAll(SAORewriteBridge.profileRows().stream().limit(2).toList());
+            } else {
+                stats.add(tr("saomenu.stat.level", p.experienceLevel));
+                stats.add(tr("saomenu.stat.experience", Math.round(p.experienceProgress * 100.0f)));
+            }
             stats.add(tr("saomenu.stat.health", trim(p.getHealth()), trim(p.getMaxHealth())));
             if (statLines >= 8) {
                 stats.add(tr("saomenu.stat.hunger", p.getFoodData().getFoodLevel()));
@@ -1432,7 +1463,11 @@ public class SAOMenuScreen extends Screen {
         String subtitle = null;
         String footer = tr("saomenu.panel.team_members", 0);
         Player p = mc().player;
-        if (p != null && mc().level != null) {
+        if (SAORewriteBridge.installed()) {
+            rows.addAll(SAORewriteBridge.partyNames());
+            footer = tr("saomenu.panel.team_members", rows.size());
+            if (rows.isEmpty()) subtitle = tr("saomenu.panel.no_team");
+        } else if (p != null && mc().level != null) {
             PlayerTeam team = mc().level.getScoreboard().getPlayersTeam(p.getGameProfile().getName());
             if (team != null) {
                 title = team.getDisplayName().getString();
@@ -1451,7 +1486,10 @@ public class SAOMenuScreen extends Screen {
     private void renderFriendsCard(GuiGraphics g, int anchorY, float eased, float alpha) {
         List<String> rows = new ArrayList<>();
         int online = 0;
-        if (mc().getConnection() != null) {
+        if (SAORewriteBridge.installed()) {
+            rows.addAll(SAORewriteBridge.friendNames());
+            online = rows.size();
+        } else if (mc().getConnection() != null) {
             List<String> names = new ArrayList<>();
             for (PlayerInfo info : mc().getConnection().getOnlinePlayers()) {
                 names.add(info.getProfile().getName());
@@ -1461,7 +1499,7 @@ public class SAOMenuScreen extends Screen {
             rows.addAll(names);
         }
         renderListCard(g, tr("saomenu.friends"), null, rows,
-                tr("saomenu.panel.online", online), anchorY, eased, alpha);
+                tr(SAORewriteBridge.installed() ? "saomenu.panel.friend_count" : "saomenu.panel.online", online), anchorY, eased, alpha);
     }
 
     /** 通用列表卡:标题/副标题 + 最多 maxRows 行 + 底部统计。 */
@@ -2110,6 +2148,20 @@ public class SAOMenuScreen extends Screen {
     }
 
     private void runAction(Action action) {
+        if (SAORewriteBridge.installed()) {
+            switch (action) {
+                case OPEN_WEAPONS -> { SAORewriteBridge.open("weapons"); return; }
+                case OPEN_RPG -> { SAORewriteBridge.open("menu"); return; }
+                case OPEN_PROGRESSION -> { SAORewriteBridge.open("progression"); return; }
+                case SKILL -> { SAORewriteBridge.open("skills"); return; }
+                case SWITCH_PARTY -> { SAORewriteBridge.open("party"); return; }
+                case SWITCH_FRIENDS -> { SAORewriteBridge.open("friends"); return; }
+                case SHOW_EQUIP, DUAL_WIELD -> { SAORewriteBridge.open("equipment"); return; }
+                case INVITE_PLAYER -> { SAORewriteBridge.invite(lastClickedLabel); return; }
+                case LEAVE_TEAM -> { SAORewriteBridge.leave(); return; }
+                default -> { }
+            }
+        }
         // INVITE_PLAYER 需要 label(玩家名),由点击处先记下再进来
         switch (action) {
             case SKILL -> {

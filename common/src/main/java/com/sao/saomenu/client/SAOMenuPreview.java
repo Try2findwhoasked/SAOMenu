@@ -43,6 +43,9 @@ public final class SAOMenuPreview {
     private static boolean done = false;
     private static boolean langSwitched = false;
     private static boolean langReloadDone = false;
+    private static String weaponQuickBefore;
+    private static boolean breathingInputVerified;
+    private static final long PREVIEW_STARTED_AT = System.currentTimeMillis();
 
     private SAOMenuPreview() {
     }
@@ -65,8 +68,9 @@ public final class SAOMenuPreview {
         if (done) {
             return;
         }
+        client.options.pauseOnLostFocus = false;
         ticks++;
-        if (ticks > 1600) {
+        if (ticks > 2600) {
             // 世界加载超时,放弃
             SAOMenu.LOGGER.warn("[SAOMenu] preview timed out waiting for world");
             done = true;
@@ -108,6 +112,16 @@ public final class SAOMenuPreview {
             return;
         }
 
+        if (Boolean.getBoolean("saomenu.bladePreview")) {
+            if (BladeTimelinePreview.tick(client, out)) done = true;
+            return;
+        }
+        if (Boolean.getBoolean("saomenu.parityPreview")) {
+            parityPreview(client, out);
+            return;
+        }
+        if (ticks % 100 == 0) SAOMenu.LOGGER.info("[SAOMenu] preview tick={} screen={} menu={}",
+                ticks, client.screen == null ? "null" : client.screen.getClass().getSimpleName(), menuTicks);
         if (!menuOpened) {
             // 无头运行时窗口可能被抢走焦点,原版会弹出暂停菜单并冻结世界;
             // 自检必须自己把它关掉,否则 worldReadyTicks 永远不前进直到超时
@@ -630,8 +644,485 @@ public final class SAOMenuPreview {
             client.keyboardHandler.keyPress(client.getWindow().getWindow(),
                     GLFW.GLFW_KEY_F5, 0, GLFW.GLFW_RELEASE, 0);
             closeScreen(client);
+            client.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+            if (SAORewriteBridge.installed() && client.getWindow().getWidth() >= 1280) {
+                client.options.guiScale().set(2);
+                client.resizeDisplay();
+                client.getTutorial().setStep(net.minecraft.client.tutorial.TutorialSteps.NONE);
+                client.getToasts().clear();
+            }
+            if (!SAORewriteBridge.installed()) {
+                done = true;
+                client.stop();
+            }
+        }
+        if (SAORewriteBridge.installed() && menuTicks >= 200) {
+            String[] pages = {"party", "friends", "equipment", "skills", "progression", "menu"};
+            String[] screens = {"PartyScreen", "FriendScreen", "EquipmentScreen", "ProfessionBindingScreen", "ProgressionScreen", "RpgMenuScreen"};
+            int index = (menuTicks - 200) / 12;
+            int phase = (menuTicks - 200) % 12;
+            if (index < pages.length) {
+                if (phase == 0) SAORewriteBridge.open(pages[index]);
+                if (phase == 10) {
+                    String actual = client.screen == null ? "null" : client.screen.getClass().getSimpleName();
+                    if (!screens[index].equals(actual)) throw new IllegalStateException("Rewrite page did not open: " + pages[index] + " / " + actual);
+                    SAOMenu.LOGGER.info("[SAOMenu] rewrite page {} -> {} rows={}", pages[index], actual, SAORewriteBridge.profileRows());
+                    grab(client, out, "rewrite_" + pages[index] + ".png");
+                }
+            } else if (menuTicks == 272) {
+                client.setScreen(new SAOMenuScreen());
+            } else if (menuTicks == 280) {
+                int w = client.getWindow().getGuiScaledWidth();
+                int h = client.getWindow().getGuiScaledHeight();
+                clickScreen(client, MenuLayout.firstButtonCenterX(w), MenuLayout.buttonCenterY(h, 0), 0);
+            } else if (menuTicks == 288) {
+                grab(client, out, "rewrite_native_menu.png");
+            } else if (menuTicks == 292) {
+                closeScreen(client);
+                client.player.connection.sendCommand("item replace entity @s hotbar.8 with minecraft:diamond_helmet");
+            } else if (menuTicks == 304) {
+                var expected = client.player.getInventory().getItem(8).copy();
+                if (!expected.is(net.minecraft.world.item.Items.DIAMOND_HELMET)
+                        || !SAORewriteBridge.equip(8, expected)) {
+                    throw new IllegalStateException("Rewrite menu equip rejected current inventory item");
+                }
+            } else if (menuTicks == 316) {
+                if (!client.player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                        .is(net.minecraft.world.item.Items.DIAMOND_HELMET)) {
+                    throw new IllegalStateException("Rewrite menu equip did not reach server");
+                }
+                client.player.connection.sendCommand("item replace entity @s hotbar.8 with minecraft:apple 3");
+            } else if (menuTicks == 328) {
+                var expected = client.player.getInventory().getItem(8).copy();
+                if (!expected.is(net.minecraft.world.item.Items.APPLE) || expected.getCount() != 3
+                        || SAORewriteBridge.drop(8, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STONE))
+                        || !SAORewriteBridge.drop(8, expected)) {
+                    throw new IllegalStateException("Rewrite menu drop did not validate inventory");
+                }
+            } else if (menuTicks == 340) {
+                if (!client.player.getInventory().getItem(8).isEmpty()) {
+                    throw new IllegalStateException("Rewrite menu drop did not remove stack");
+                }
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite inventory equip/drop verified, stale action rejected");
+                SAORewriteBridge.open("friends");
+            } else if (menuTicks == 352) {
+                var input = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.EditBox)
+                        .map(value -> (net.minecraft.client.gui.components.EditBox) value).findFirst().orElseThrow();
+                clickScreen(client, input.getX() + 4, input.getY() + 4, 0);
+                client.screen.charTyped('D', 0);
+            } else if (menuTicks == 392) {
+                client.screen.charTyped('e', 0);
+                var input = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.EditBox)
+                        .map(value -> (net.minecraft.client.gui.components.EditBox) value).findFirst().orElseThrow();
+                if (!input.getValue().equals("De")) throw new IllegalStateException("Friend input lost focus after refresh");
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite friend input retained across snapshot refresh");
+                grab(client, out, "rewrite_friends_input.png");
+            } else if (menuTicks == 400) {
+                SAORewriteBridge.open("skills");
+            } else if (menuTicks == 412) {
+                int w = client.screen.width;
+                clickScreen(client, (w - Math.min(550, w - 24)) / 2 + 20, 70, 0);
+            } else if (menuTicks == 432) {
+                var rows = SAORewriteBridge.profileRows();
+                if (rows.size() < 3 || rows.get(2).equals("--")) throw new IllegalStateException("Profession selection did not reach server");
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite profession selected through UI rows={}", rows);
+                grab(client, out, "rewrite_skills_selected.png");
+            } else if (menuTicks == 440) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:northern_icebow");
+            } else if (menuTicks == 452) {
+                SAORewriteBridge.open("weapons");
+            } else if (menuTicks == 464) {
+                if (client.screen == null || !client.screen.getClass().getSimpleName().equals("WeaponSkillsScreen")) {
+                    throw new IllegalStateException("Weapon arts page did not open");
+                }
+                var quick = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .filter(value -> value.getMessage().getString().startsWith("X"))
+                        .findFirst().orElseThrow();
+                weaponQuickBefore = quick.getMessage().getString();
+                quick.onPress();
+            } else if (menuTicks == 470) {
+                var art = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .filter(value -> value.getMessage().getString().contains("极光穿刺"))
+                        .findFirst().orElseThrow();
+                art.onPress();
+            } else if (menuTicks == 480) {
+                boolean updated = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .anyMatch(value -> value.getMessage().getString().contains("X")
+                                && value.getMessage().getString().contains("极光穿刺")
+                                && !value.getMessage().getString().equals(weaponQuickBefore));
+                if (!updated) throw new IllegalStateException("Weapon quick binding did not update through UI");
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite weapon arts and shortcut rebinding verified");
+                grab(client, out, "rewrite_weapon_skills.png");
+            } else if (menuTicks == 500) {
+                client.setScreen(new net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen(
+                        client.player, client.player.connection.enabledFeatures(), true));
+            } else if (menuTicks == 512) {
+                var items = net.minecraft.core.registries.BuiltInRegistries.ITEM.keySet().stream()
+                        .filter(id -> id.getNamespace().equals("saomod_rewrite")).sorted().toList();
+                SAOMenu.LOGGER.info("[SAOMenu] rewrite registered items count={} ids={}", items.size(), items);
+                for (var tab : net.minecraft.core.registries.BuiltInRegistries.CREATIVE_MODE_TAB) {
+                    var id = net.minecraft.core.registries.BuiltInRegistries.CREATIVE_MODE_TAB.getKey(tab);
+                    if (id.getNamespace().equals("saomod_rewrite")) {
+                        SAOMenu.LOGGER.info("[SAOMenu] rewrite creative tab {} count={}", id, tab.getDisplayItems().size());
+                        if (id.getPath().equals("weapons")) writeWeaponManifest(tab, out);
+                    }
+                }
+                grab(client, out, "rewrite_creative_inventory.png");
+                if (net.minecraft.core.registries.BuiltInRegistries.CREATIVE_MODE_TAB.containsKey(
+                        new net.minecraft.resources.ResourceLocation("saomod_rewrite", "catalog"))) {
+                    clickScreen(client, (client.screen.width - 195) / 2 + 42,
+                            (client.screen.height - 136) / 2 - 16, 0);
+                    releaseScreen(client, (client.screen.width - 195) / 2 + 42,
+                            (client.screen.height - 136) / 2 - 16, 0);
+                }
+                moveCursorTo(client, 4, 4);
+            } else if (menuTicks == 520) {
+                grab(client, out, "rewrite_creative_weapons.png");
+            } else if (menuTicks == 532) {
+                scrollScreen(client, client.screen.width / 2.0, client.screen.height / 2.0, -20);
+            } else if (menuTicks == 540) {
+                grab(client, out, "rewrite_creative_weapons_last.png");
+            } else if (menuTicks == 548) {
+                SAORewriteBridge.open("weapons");
+            } else if (menuTicks == 560) {
+                var fusion = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .filter(value -> value.getY() == 24).findFirst().orElseThrow();
+                fusion.onPress();
+            } else if (menuTicks == 580) {
+                try {
+                    var state = Class.forName("cn.saomod.rewrite.infrastructure.network.WeaponMenuClientState");
+                    var snapshot = ((java.util.Optional<?>) state.getMethod("snapshot").invoke(null)).orElseThrow();
+                    if (!(Boolean) snapshot.getClass().getMethod("fusionSupported").invoke(snapshot)
+                            || (Integer) snapshot.getClass().getMethod("fusionOption").invoke(snapshot) != 1) {
+                        throw new IllegalStateException("Fusion selection did not reach menu snapshot");
+                    }
+                    SAOMenu.LOGGER.info("[SAOMenu] rewrite fusion option synchronized {}", snapshot);
+                } catch (ReflectiveOperationException failure) {
+                    throw new IllegalStateException("Cannot inspect rewrite fusion snapshot", failure);
+                }
+                grab(client, out, "rewrite_fusion_skills.png");
+            } else if (menuTicks == 588) {
+                if (!Boolean.getBoolean("saomenu.combatPreview")) {
+                    done = true;
+                    client.stop();
+                } else {
+                    client.setScreen(null);
+                    client.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+                    client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:elucidator");
+                }
+            } else if (menuTicks == 600) {
+                client.player.connection.sendCommand("saomod weapon acg");
+            } else if (menuTicks == 606) {
+                grab(client, out, "rewrite_judgement_charge.png");
+            } else if (menuTicks == 620) {
+                client.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
+            } else if (menuTicks == 626) {
+                grab(client, out, "rewrite_judgement_finish.png");
+            } else if (menuTicks == 640) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:northern_icebow");
+            } else if (menuTicks == 650) {
+                client.player.setXRot(8);
+                client.options.keyUse.setDown(true);
+                client.gameMode.useItem(client.player, net.minecraft.world.InteractionHand.MAIN_HAND);
+            } else if (menuTicks == 674) {
+                client.options.keyUse.setDown(false);
+                client.gameMode.releaseUsingItem(client.player);
+            } else if (menuTicks == 678) {
+                grab(client, out, "rewrite_icebow_launch.png");
+            } else if (menuTicks == 688) {
+                grab(client, out, "rewrite_icebow_trail.png");
+            } else if (menuTicks == 710) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:elucidator");
+                client.player.connection.sendCommand("saomod profession cast 2");
+            } else if (menuTicks == 722) {
+                grab(client, out, "rewrite_warrior_charge.png");
+            } else if (menuTicks == 735) {
+                grab(client, out, "rewrite_warrior_release_early.png");
+            } else if (menuTicks == 738) {
+                grab(client, out, "rewrite_warrior_release_swing.png");
+            } else if (menuTicks == 742) {
+                grab(client, out, "rewrite_warrior_release.png");
+            } else if (menuTicks == 940) {
+                client.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+                client.player.connection.sendCommand("saomod profession select saomod_rewrite:mage");
+            } else if (menuTicks == 964) {
+                if (!SAORewriteBridge.profileRows().get(2).contains("魔术师")) {
+                    throw new IllegalStateException("Mage selection did not reach server after recovery");
+                }
+            } else if (menuTicks == 976) {
+                client.player.connection.sendCommand("saomod profession cast 1");
+            } else if (menuTicks == 980) {
+                grab(client, out, "rewrite_mage_fireball.png");
+            } else if (menuTicks == 982) {
+                grab(client, out, "rewrite_mage_fireball_later.png");
+            } else if (menuTicks == 986) {
+                grab(client, out, "rewrite_mage_explosion_early.png");
+            } else if (menuTicks == 992) {
+                grab(client, out, "rewrite_mage_explosion.png");
+            } else if (menuTicks == 1020) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:thunder_breathing_nichirin");
+            } else if (menuTicks == 1036) {
+                SAORewriteBridge.open("skills");
+            } else if (menuTicks == 1056) {
+                long fixed = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .filter(value -> !value.active && (value.getMessage().getString().contains("霹雳一闪")
+                                || value.getMessage().getString().contains("爆裂天降"))).count();
+                if (fixed != 2 || !SAORewriteBridge.profileRows().get(2).contains("魔术师")) {
+                    throw new IllegalStateException("Breathing form UI must preserve mage and expose fixed first/sixth arts");
+                }
+                grab(client, out, "rewrite_breathing_fixed_skills.png");
+                client.setScreen(null);
+            } else if (menuTicks == 1060) {
+                try {
+                    var keys = Class.forName("cn.saomod.rewrite.platform.client.ClientProfessionKeys");
+                    var key = (net.minecraft.client.KeyMapping) keys.getField("CAST_THREE").get(null);
+                    net.minecraft.client.KeyMapping.click((com.mojang.blaze3d.platform.InputConstants.Key)
+                            key.getClass().getMethod("getKey").invoke(key));
+                    // A background preview can have vanilla clear queued input before the next frame.
+                    // Consume the actual mapping now through the same Forge END-tick handler.
+                    var eventType = Class.forName("net.minecraftforge.event.TickEvent$ClientTickEvent");
+                    var phaseType = Class.forName("net.minecraftforge.event.TickEvent$Phase");
+                    Object end = java.util.Arrays.stream(phaseType.getEnumConstants())
+                            .filter(value -> value.toString().equals("END")).findFirst().orElseThrow();
+                    Object event = eventType.getConstructor(phaseType).newInstance(end);
+                    Class.forName("cn.saomod.rewrite.platform.client.ClientProfessionEvents")
+                            .getMethod("onClientTick", eventType).invoke(null, event);
+                } catch (ReflectiveOperationException failure) {
+                    throw new IllegalStateException("Cannot press actual third breathing input", failure);
+                }
+            } else if (menuTicks >= 1072 && menuTicks < 1120 && !breathingInputVerified) {
+                try {
+                    var state = Class.forName("cn.saomod.rewrite.infrastructure.network.BreathingClientState");
+                    var view = ((java.util.Optional<?>) state.getMethod("snapshot").invoke(null)).orElseThrow();
+                    var slots = (java.util.List<?>) view.getClass().getMethod("slots").invoke(view);
+                    int remaining = (Integer) slots.get(2).getClass().getMethod("remainingCooldownTicks").invoke(slots.get(2));
+                    if (remaining <= 0) {
+                        if (menuTicks >= 1118) throw new IllegalStateException("Actual third breathing key did not start its authoritative cooldown");
+                        return;
+                    }
+                    breathingInputVerified = true;
+                    SAOMenu.LOGGER.info("[SAOMenu] actual third breathing mapping reached server cooldown={}", remaining);
+                } catch (ReflectiveOperationException failure) {
+                    throw new IllegalStateException("Cannot verify actual third breathing input", failure);
+                }
+                grab(client, out, "rewrite_breathing_third_input.png");
+            } else if (menuTicks == 1120) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:water_breathing_nichirin");
+            } else if (menuTicks == 1136) {
+                SAORewriteBridge.open("skills");
+            } else if (menuTicks == 1156) {
+                grab(client, out, "rewrite_water_fixed_skills.png");
+                client.setScreen(null);
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with minecraft:air");
+            } else if (menuTicks == 1176) {
+                SAORewriteBridge.open("skills");
+            } else if (menuTicks == 1196) {
+                grab(client, out, "rewrite_profession_after_breathing.png");
+                SAOMenu.LOGGER.info("[SAOMenu] fixed breathing UI, real profession preservation and actual third key preview complete");
+                client.setScreen(null);
+                client.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
+                client.player.setXRot(25);
+                client.player.connection.sendCommand("fill ~-20 119 ~-20 ~20 119 ~20 minecraft:black_concrete");
+                client.player.connection.sendCommand("tp @s ~ 120 ~ 0 25");
+                client.player.connection.sendCommand("time set night");
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:northern_icebow");
+                client.getSingleplayerServer().execute(() -> {
+                    var player = client.getSingleplayerServer().getPlayerList().getPlayer(client.player.getUUID());
+                    try {
+                        var data = (net.minecraft.nbt.CompoundTag) player.getClass().getMethod("getPersistentData").invoke(player);
+                        data.putInt("SaoWeaponMastery_saomod_rewrite:weapon/northern_icebow", 1000);
+                    } catch (ReflectiveOperationException failure) {
+                        throw new IllegalStateException("Cannot prepare icebow preview mastery", failure);
+                    }
+                });
+            } else if (menuTicks == 1220) {
+                client.player.connection.sendCommand("saomod weapon cast saomod_rewrite:weapon/northern_icebow 1");
+            } else if (menuTicks == 1228) {
+                grab(client, out, "rewrite_icebow_art_one_charge.png");
+            } else if (menuTicks == 1240) {
+                grab(client, out, "rewrite_icebow_art_one_dragon.png");
+            } else if (menuTicks == 1320) {
+                client.player.connection.sendCommand("saomod weapon cast saomod_rewrite:weapon/northern_icebow 2");
+            } else if (menuTicks == 1350) {
+                grab(client, out, "rewrite_icebow_art_two_rain.png");
+            } else if (menuTicks == 1480) {
+                client.player.connection.sendCommand("saomod weapon cast saomod_rewrite:weapon/northern_icebow 3");
+            } else if (menuTicks == 1498) {
+                grab(client, out, "rewrite_icebow_art_three_cage.png");
+            } else if (menuTicks == 1508) {
+                grab(client, out, "rewrite_icebow_art_three_collapse.png");
+            } else if (menuTicks == 1620) {
+                client.player.connection.sendCommand("saomod weapon cast saomod_rewrite:weapon/northern_icebow 4");
+            } else if (menuTicks == 1640) {
+                grab(client, out, "rewrite_icebow_art_four_charge.png");
+            } else if (menuTicks == 1680) {
+                grab(client, out, "rewrite_icebow_art_four_burst.png");
+            } else if (menuTicks == 1800) {
+                done = true;
+                client.stop();
+            }
+        }
+    }
+
+    private static void parityPreview(Minecraft client, String out) {
+        if (client.player == null || client.level == null) return;
+        if (client.screen instanceof net.minecraft.client.gui.screens.PauseScreen) client.setScreen(null);
+        worldReadyTicks++;
+        try {
+            if (Boolean.getBoolean("saomenu.stylePreview") && worldReadyTicks >= 230) {
+                stylePreview(client, out, worldReadyTicks - 230);
+                return;
+            }
+            if (worldReadyTicks == 20) {
+                client.options.guiScale().set(3);
+                client.resizeDisplay();
+                Class.forName("cn.saomod.rewrite.platform.client.ClientCompanionEvents").getMethod("request").invoke(null);
+                client.setScreen((net.minecraft.client.gui.screens.Screen) Class.forName(
+                        "cn.saomod.rewrite.platform.client.CompanionCollectionScreen")
+                        .getConstructor(net.minecraft.client.gui.screens.Screen.class).newInstance(new Object[] {null}));
+            } else if (worldReadyTicks == 50) grab(client, out, "parity_collection_small.png");
+            else if (worldReadyTicks == 60) pressButton(client, "查看收服图鉴");
+            else if (worldReadyTicks == 85) grab(client, out, "parity_guide_small.png");
+            else if (worldReadyTicks == 95) clickScreen(client, client.getWindow().getGuiScaledWidth() / 2.0, 86, 0);
+            else if (worldReadyTicks == 120) grab(client, out, "parity_pet_guide.png");
+            else if (worldReadyTicks == 130) pressButton(client, "查看外观");
+            else if (worldReadyTicks == 155) grab(client, out, "parity_pet_preview.png");
+            else if (worldReadyTicks == 165) {
+                client.setScreen((net.minecraft.client.gui.screens.Screen) Class.forName(
+                        "cn.saomod.rewrite.platform.client.VisualSettingsScreen")
+                        .getConstructor(net.minecraft.client.gui.screens.Screen.class).newInstance(new Object[] {null}));
+            } else if (worldReadyTicks == 185) grab(client, out, "parity_visual_settings.png");
+            else if (worldReadyTicks == 195) {
+                Class.forName("cn.saomod.rewrite.platform.client.ClientHomeEvents").getMethod("request").invoke(null);
+                client.setScreen((net.minecraft.client.gui.screens.Screen) Class.forName(
+                        "cn.saomod.rewrite.platform.client.HomeScreen").getConstructor().newInstance());
+            } else if (worldReadyTicks == 220) grab(client, out, "parity_home_small.png");
+            else if (worldReadyTicks == 230) {
+                client.setScreen(null);
+                client.player.setYRot(0);
+                client.player.setXRot(12);
+                client.getSingleplayerServer().execute(() -> {
+                    var owner = client.getSingleplayerServer().getPlayerList().getPlayer(client.player.getUUID());
+                    owner.setYRot(0);
+                    var at = owner.position().add(0, 0, 4);
+                    try {
+                        var spawn = Class.forName("cn.saomod.rewrite.platform.forge.skill.ProfessionVisualEntities")
+                                .getMethod("spawn", net.minecraft.server.level.ServerPlayer.class, String.class, String.class,
+                                        int.class, float.class, net.minecraft.world.phys.Vec3.class,
+                                        net.minecraft.world.phys.Vec3.class, boolean.class);
+                        for (String model : new String[] {"json/shaman_model/totem_fire", "mage/cryo_prison_cage", "json/paladin_model/holy_chains"}) {
+                            double x = model.contains("shaman") ? -2 : model.contains("paladin") ? 2 : 0;
+                            var point = at.add(x, model.startsWith("json/") ? 1 : 0, 0);
+                            spawn.invoke(null, owner, model, model.contains("cage") ? "crystal_the_enemy" : "animation",
+                                    180, .7F, point, point, false);
+                        }
+                    } catch (ReflectiveOperationException failure) {
+                        SAOMenu.LOGGER.error("Support visual preview failed", failure);
+                    }
+                });
+            } else if (worldReadyTicks == 270) grab(client, out, "parity_support_models.png");
+            else if (worldReadyTicks == 280) { done = true; client.stop(); }
+        } catch (ReflectiveOperationException failure) {
+            SAOMenu.LOGGER.error("Parity preview failed", failure);
             done = true;
             client.stop();
+        }
+    }
+
+    private static void pressButton(Minecraft client, String label) {
+        if (client.screen == null) throw new IllegalStateException("Expected preview screen");
+        client.screen.children().stream().filter(net.minecraft.client.gui.components.Button.class::isInstance)
+                .map(net.minecraft.client.gui.components.Button.class::cast)
+                .filter(button -> button.getMessage().getString().equals(label)).findFirst().orElseThrow().onPress();
+    }
+
+    private static void stylePreview(Minecraft client, String out, int tick) throws ReflectiveOperationException {
+        String[] pages = {"RpgMenuScreen", "ProfessionBindingScreen", "WeaponSkillsScreen", "EquipmentScreen",
+                "PartyScreen", "FriendScreen", "QuestJournalScreen", "ProgressionScreen", "CrystalWaypointScreen",
+                "HomeAccessScreen", "EmoteScreen", "TradeScreen", "CommissionScreen", "DialogueScreen"};
+        String[] requests = {"RpgMenuEvents:refresh", "ClientProfessionEvents:requestSnapshot", "", "ClientEquipmentEvents:request",
+                "ClientPartyEvents:request", "ClientFriendEvents:request", "ClientQuestJournalEvents:request",
+                "ClientProgressionEvents:request", "ClientCrystalEvents:request", "ClientHomeEvents:request", "", "", "", ""};
+        int pass = tick / (35 * pages.length);
+        int index = tick / 35 % pages.length;
+        if (pass >= 2) {
+            for (String page : pages) for (String prefix : new String[] {"style_", "style_narrow_"}) {
+                File file = new File(out, prefix + page + ".png");
+                if (!file.isFile() || file.lastModified() < PREVIEW_STARTED_AT) {
+                    throw new IllegalStateException("Missing current style screenshot " + file);
+                }
+            }
+            try { Files.writeString(Path.of(out, "style-preview-result.txt"), "PASSED\n28 current page screenshots\nkeyboard editing and sixteen-option pagination passed\n"); }
+            catch (IOException failure) { throw new IllegalStateException("Cannot save style preview verification", failure); }
+            done = true; client.stop(); return;
+        }
+        if (pass == 1 && index == 0 && tick % 35 == 0) {
+            GLFW.glfwSetWindowSize(client.getWindow().getWindow(), 960, 720);
+            client.resizeDisplay();
+        }
+        if (tick % 35 == 0) {
+            if (pages[index].equals("WeaponSkillsScreen")) {
+                client.getSingleplayerServer().execute(() -> {
+                    var owner = client.getSingleplayerServer().getPlayerList().getPlayer(client.player.getUUID());
+                    owner.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(
+                            net.minecraft.core.registries.BuiltInRegistries.ITEM.get(new net.minecraft.resources.ResourceLocation("saomod_rewrite:elucidator"))));
+                });
+            }
+            if (!requests[index].isEmpty()) {
+                String[] request = requests[index].split(":");
+                Class.forName("cn.saomod.rewrite.platform.client." + request[0]).getMethod(request[1]).invoke(null);
+            }
+            if (pages[index].equals("DialogueScreen")) {
+                Class<?> identifier = Class.forName("cn.saomod.rewrite.shared.NamespacedId");
+                Object npc = identifier.getMethod("parse", String.class).invoke(null, "saomod_rewrite:preview_npc");
+                Class<?> message = Class.forName("cn.saomod.rewrite.infrastructure.network.DialogueViewMessage");
+                var choices = java.util.stream.IntStream.rangeClosed(1, 16).mapToObj(value -> "预览选项 " + value).toList();
+                Object view = message.getConstructor(identifier, boolean.class, String.class, String.class, java.util.List.class, String.class)
+                        .newInstance(npc, true, "preview", "对话排版预览：正文可滚动，十六个选项按窗口高度分页。".repeat(8), choices, "");
+                Class.forName("cn.saomod.rewrite.infrastructure.network.DialogueClientState").getMethod("accept", message).invoke(null, view);
+            }
+            Class<?> type = Class.forName("cn.saomod.rewrite.platform.client." + pages[index]);
+            net.minecraft.client.gui.screens.Screen screen;
+            try { screen = (net.minecraft.client.gui.screens.Screen) type.getConstructor().newInstance(); }
+            catch (NoSuchMethodException missing) {
+                screen = (net.minecraft.client.gui.screens.Screen) type.getConstructor(net.minecraft.client.gui.screens.Screen.class)
+                        .newInstance(new Object[] {null});
+            }
+            client.setScreen(screen);
+        } else if (tick % 35 == 12 && pages[index].equals("FriendScreen")) {
+            var box = client.screen.children().stream().filter(net.minecraft.client.gui.components.EditBox.class::isInstance)
+                    .map(net.minecraft.client.gui.components.EditBox.class::cast).findFirst().orElseThrow();
+            box.setValue("Player");
+            client.screen.setFocused(box);
+            box.setFocused(true);
+            client.screen.charTyped('_', 0);
+            if (!box.getValue().equals("Player_")) throw new IllegalStateException("Styled input lost keyboard editing");
+        } else if (tick % 35 == 14 && pages[index].equals("DialogueScreen")) {
+            for (int page = 0; page < 7; page++) pressButton(client, "下一页");
+            boolean last = client.screen.children().stream().filter(net.minecraft.client.gui.components.Button.class::isInstance)
+                    .map(net.minecraft.client.gui.components.Button.class::cast)
+                    .anyMatch(button -> button.getMessage().getString().equals("预览选项 16")
+                            && button.getY() + button.getHeight() < client.getWindow().getGuiScaledHeight() - 54);
+            if (!last) throw new IllegalStateException("Sixteen dialogue options are not reachable within the page");
+        } else if (tick % 35 == 24) grab(client, out, "style_" + (pass == 1 ? "narrow_" : "") + pages[index] + ".png");
+        else if (tick % 35 == 28 && pages[index].equals("DialogueScreen")) {
+            pressButton(client, "返回菜单");
+            Object state = Class.forName("cn.saomod.rewrite.infrastructure.network.DialogueClientState").getMethod("current").invoke(null);
+            if (state instanceof java.util.Optional<?> current && current.isPresent()) {
+                throw new IllegalStateException("Returning to the menu left a dialogue that would reopen");
+            }
         }
     }
 
@@ -714,7 +1205,7 @@ public final class SAOMenuPreview {
         }
     }
 
-    private static void grab(Minecraft client, String out, String name) {
+    static void grab(Minecraft client, String out, String name) {
         try (NativeImage image = Screenshot.takeScreenshot(client.getMainRenderTarget())) {
             Path dir = new File(out).toPath();
             Files.createDirectories(dir);
@@ -723,6 +1214,30 @@ public final class SAOMenuPreview {
             SAOMenu.LOGGER.info("[SAOMenu] preview written to {}", file.toAbsolutePath());
         } catch (IOException e) {
             SAOMenu.LOGGER.error("[SAOMenu] preview failed", e);
+        }
+    }
+
+    private static void writeWeaponManifest(net.minecraft.world.item.CreativeModeTab tab, String out) {
+        var entries = new com.google.gson.JsonArray();
+        for (var stack : tab.getDisplayItems()) {
+            var entry = new com.google.gson.JsonObject();
+            entry.addProperty("id", net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+            entry.addProperty("name", stack.getHoverName().getString());
+            entry.addProperty("durability", stack.getMaxDamage());
+            if (stack.getItem() instanceof net.minecraft.world.item.SwordItem) {
+                var modifiers = stack.getAttributeModifiers(net.minecraft.world.entity.EquipmentSlot.MAINHAND);
+                entry.addProperty("totalDamage", 1 + modifiers.get(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE)
+                        .stream().mapToDouble(value -> value.getAmount()).sum());
+                entry.addProperty("attackSpeed", 4 + modifiers.get(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_SPEED)
+                        .stream().mapToDouble(value -> value.getAmount()).sum());
+            }
+            entries.add(entry);
+        }
+        try {
+            Files.writeString(Path.of(out, "weapon_inventory.json"),
+                    new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(entries));
+        } catch (IOException failure) {
+            throw new IllegalStateException("Cannot write actual creative weapon inventory", failure);
         }
     }
 }

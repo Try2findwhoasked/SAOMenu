@@ -45,6 +45,7 @@ public final class SAOTeamManager {
 
     /** 发起者 inviteTargetName 的邀请流程;结果通过聊天栏 + 通知反馈双方。 */
     public static void handleInvite(MinecraftServer server, ServerPlayer inviter, String targetName) {
+        if (dev.architectury.platform.Platform.isModLoaded("saomod_rewrite")) return;
         ServerPlayer target = server.getPlayerList().getPlayerByName(targetName);
         if (target == null) {
             inviter.sendSystemMessage(Component.translatable("saomenu.party.msg.not_online", targetName));
@@ -75,6 +76,7 @@ public final class SAOTeamManager {
 
     /** 被邀请人对邀请的应答。 */
     public static void handleInviteResponse(MinecraftServer server, ServerPlayer target, boolean accept) {
+        if (dev.architectury.platform.Platform.isModLoaded("saomod_rewrite")) return;
         PendingInvite invite = PENDING.remove(target.getUUID());
         if (invite == null || invite.expired(System.currentTimeMillis())) {
             return;
@@ -104,6 +106,7 @@ public final class SAOTeamManager {
 
     /** 离开当前队伍;若为队长且队内还有他人,队长位转移给字典序第一的成员。 */
     public static void handleLeave(MinecraftServer server, ServerPlayer leaver) {
+        if (dev.architectury.platform.Platform.isModLoaded("saomod_rewrite")) return;
         PlayerTeam team = teamOf(server, leaver);
         if (team == null || !team.getName().startsWith(PREFIX)) {
             leaver.sendSystemMessage(Component.translatable("saomenu.party.msg.no_party"));

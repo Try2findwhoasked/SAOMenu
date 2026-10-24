@@ -28,6 +28,10 @@ public final class SAOClientPartyState {
 
     /** 收到邀请(网络线程 → 主线程)。 */
     public static void onInviteReceived(String inviterName) {
+        if (com.sao.saomenu.client.SAORewriteBridge.installed()) {
+            com.sao.saomenu.client.SAORewriteBridge.open("party");
+            return;
+        }
         pendingInviter = inviterName;
         inviteAt = System.currentTimeMillis();
         Minecraft mc = Minecraft.getInstance();
@@ -38,6 +42,7 @@ public final class SAOClientPartyState {
 
     /** 收到队伍同步(网络线程 → 主线程)。 */
     public static void onTeamSync(String title, List<String> members) {
+        if (com.sao.saomenu.client.SAORewriteBridge.installed()) return;
         teamTitle = title == null ? "" : title;
         teamMembers = new ArrayList<>(members);
         // 自己离队时顺手清掉陈旧邀请
@@ -65,16 +70,22 @@ public final class SAOClientPartyState {
 
     /** 队伍标题(队长名);无队伍为空串。 */
     public static String teamTitle() {
+        if (com.sao.saomenu.client.SAORewriteBridge.installed()) return
+                com.sao.saomenu.client.SAORewriteBridge.inParty() ? "SAO RPG" : "";
         return teamTitle;
     }
 
     /** 队伍成员名(已排序,不含重复);无队伍为空表。 */
     public static List<String> teamMembers() {
+        if (com.sao.saomenu.client.SAORewriteBridge.installed()) return
+                com.sao.saomenu.client.SAORewriteBridge.partyNames();
         return teamMembers;
     }
 
     /** 是否在模组队伍中。 */
     public static boolean inParty() {
+        if (com.sao.saomenu.client.SAORewriteBridge.installed()) return
+                com.sao.saomenu.client.SAORewriteBridge.inParty();
         return !teamTitle.isEmpty() && !teamMembers.isEmpty();
     }
 

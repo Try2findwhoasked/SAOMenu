@@ -341,7 +341,7 @@ public final class SAOTargetBar3D {
         // 真正贵的是 drawRing/drawMarker 与 clip 射线,所以射线也放到第二趟。
         List<Candidate> cands = new ArrayList<>();
         for (Entity e : mc.level.entitiesForRendering()) {
-            if (!(e instanceof LivingEntity le) || le == mc.player || !le.isAlive()) {
+            if (!(e instanceof LivingEntity le) || le == mc.player || !le.isAlive() || !le.isAttackable()) {
                 continue;
             }
             if (le instanceof Player && mc.player.isPassenger()) {

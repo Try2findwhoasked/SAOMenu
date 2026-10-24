@@ -26,7 +26,9 @@ public class SAOMenuForge {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(SAONetwork::init);
+        if (!dev.architectury.platform.Platform.isModLoaded("saomod_rewrite")) {
+            event.enqueueWork(SAONetwork::init);
+        }
     }
 
     /** 玩家退网:清掉挂在他名下的邀请会话,并让他离队(同步给剩余队员)。 */
@@ -35,6 +37,7 @@ public class SAOMenuForge {
 
         @SubscribeEvent
         public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+            if (dev.architectury.platform.Platform.isModLoaded("saomod_rewrite")) return;
             if (event.getEntity() instanceof ServerPlayer sp) {
                 SAOTeamManager.clearPending(sp.getUUID());
                 if (SAOTeamManager.teamOf(sp.getServer(), sp) != null) {
