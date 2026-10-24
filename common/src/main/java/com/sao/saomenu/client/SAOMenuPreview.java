@@ -66,6 +66,7 @@ public final class SAOMenuPreview {
         if (done) {
             return;
         }
+        client.options.pauseOnLostFocus = false;
         ticks++;
         if (ticks > 1600) {
             // 世界加载超时,放弃
@@ -109,6 +110,8 @@ public final class SAOMenuPreview {
             return;
         }
 
+        if (ticks % 100 == 0) SAOMenu.LOGGER.info("[SAOMenu] preview tick={} screen={} menu={}",
+                ticks, client.screen == null ? "null" : client.screen.getClass().getSimpleName(), menuTicks);
         if (!menuOpened) {
             // 无头运行时窗口可能被抢走焦点,原版会弹出暂停菜单并冻结世界;
             // 自检必须自己把它关掉,否则 worldReadyTicks 永远不前进直到超时
@@ -727,15 +730,23 @@ public final class SAOMenuPreview {
                 var quick = client.screen.children().stream()
                         .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
                         .map(value -> (net.minecraft.client.gui.components.Button) value)
-                        .filter(value -> value.getMessage().getString().startsWith("Z"))
+                        .filter(value -> value.getMessage().getString().startsWith("X"))
                         .findFirst().orElseThrow();
                 weaponQuickBefore = quick.getMessage().getString();
                 quick.onPress();
+            } else if (menuTicks == 470) {
+                var art = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .filter(value -> value.getMessage().getString().contains("极光穿刺"))
+                        .findFirst().orElseThrow();
+                art.onPress();
             } else if (menuTicks == 480) {
                 boolean updated = client.screen.children().stream()
                         .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
                         .map(value -> (net.minecraft.client.gui.components.Button) value)
-                        .anyMatch(value -> value.getMessage().getString().startsWith("Z")
+                        .anyMatch(value -> value.getMessage().getString().contains("X")
+                                && value.getMessage().getString().contains("极光穿刺")
                                 && !value.getMessage().getString().equals(weaponQuickBefore));
                 if (!updated) throw new IllegalStateException("Weapon quick binding did not update through UI");
                 SAOMenu.LOGGER.info("[SAOMenu] rewrite weapon arts and shortcut rebinding verified");
@@ -832,6 +843,7 @@ public final class SAOMenuPreview {
             } else if (menuTicks == 742) {
                 grab(client, out, "rewrite_warrior_release.png");
             } else if (menuTicks == 940) {
+                client.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
                 client.player.connection.sendCommand("saomod profession select saomod_rewrite:mage");
             } else if (menuTicks == 964) {
                 if (!SAORewriteBridge.profileRows().get(2).contains("魔术师")) {
@@ -841,9 +853,70 @@ public final class SAOMenuPreview {
                 client.player.connection.sendCommand("saomod profession cast 1");
             } else if (menuTicks == 980) {
                 grab(client, out, "rewrite_mage_fireball.png");
+            } else if (menuTicks == 982) {
+                grab(client, out, "rewrite_mage_fireball_later.png");
+            } else if (menuTicks == 986) {
+                grab(client, out, "rewrite_mage_explosion_early.png");
             } else if (menuTicks == 992) {
                 grab(client, out, "rewrite_mage_explosion.png");
             } else if (menuTicks == 1020) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:thunder_breathing_nichirin");
+            } else if (menuTicks == 1036) {
+                SAORewriteBridge.open("skills");
+            } else if (menuTicks == 1056) {
+                long fixed = client.screen.children().stream()
+                        .filter(value -> value instanceof net.minecraft.client.gui.components.Button)
+                        .map(value -> (net.minecraft.client.gui.components.Button) value)
+                        .filter(value -> !value.active && (value.getMessage().getString().contains("霹雳一闪")
+                                || value.getMessage().getString().contains("爆裂天降"))).count();
+                if (fixed != 2 || !SAORewriteBridge.profileRows().get(2).contains("魔术师")) {
+                    throw new IllegalStateException("Breathing form UI must preserve mage and expose fixed first/sixth arts");
+                }
+                grab(client, out, "rewrite_breathing_fixed_skills.png");
+                client.setScreen(null);
+            } else if (menuTicks == 1060) {
+                try {
+                    var keys = Class.forName("cn.saomod.rewrite.platform.client.ClientProfessionKeys");
+                    var key = (net.minecraft.client.KeyMapping) keys.getField("CAST_THREE").get(null);
+                    net.minecraft.client.KeyMapping.click((com.mojang.blaze3d.platform.InputConstants.Key)
+                            key.getClass().getMethod("getKey").invoke(key));
+                    // A background preview can have vanilla clear queued input before the next frame.
+                    // Consume the actual mapping now through the same Forge END-tick handler.
+                    var eventType = Class.forName("net.minecraftforge.event.TickEvent$ClientTickEvent");
+                    var phaseType = Class.forName("net.minecraftforge.event.TickEvent$Phase");
+                    Object end = java.util.Arrays.stream(phaseType.getEnumConstants())
+                            .filter(value -> value.toString().equals("END")).findFirst().orElseThrow();
+                    Object event = eventType.getConstructor(phaseType).newInstance(end);
+                    Class.forName("cn.saomod.rewrite.platform.client.ClientProfessionEvents")
+                            .getMethod("onClientTick", eventType).invoke(null, event);
+                } catch (ReflectiveOperationException failure) {
+                    throw new IllegalStateException("Cannot press actual third breathing input", failure);
+                }
+            } else if (menuTicks == 1072) {
+                try {
+                    var state = Class.forName("cn.saomod.rewrite.infrastructure.network.BreathingClientState");
+                    var view = ((java.util.Optional<?>) state.getMethod("snapshot").invoke(null)).orElseThrow();
+                    var slots = (java.util.List<?>) view.getClass().getMethod("slots").invoke(view);
+                    int remaining = (Integer) slots.get(2).getClass().getMethod("remainingCooldownTicks").invoke(slots.get(2));
+                    if (remaining <= 0) throw new IllegalStateException("Actual third breathing key did not start its authoritative cooldown");
+                    SAOMenu.LOGGER.info("[SAOMenu] actual third breathing mapping reached server cooldown={}", remaining);
+                } catch (ReflectiveOperationException failure) {
+                    throw new IllegalStateException("Cannot verify actual third breathing input", failure);
+                }
+                grab(client, out, "rewrite_breathing_third_input.png");
+            } else if (menuTicks == 1120) {
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:water_breathing_nichirin");
+            } else if (menuTicks == 1136) {
+                SAORewriteBridge.open("skills");
+            } else if (menuTicks == 1156) {
+                grab(client, out, "rewrite_water_fixed_skills.png");
+                client.setScreen(null);
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with minecraft:air");
+            } else if (menuTicks == 1176) {
+                SAORewriteBridge.open("skills");
+            } else if (menuTicks == 1196) {
+                grab(client, out, "rewrite_profession_after_breathing.png");
+                SAOMenu.LOGGER.info("[SAOMenu] fixed breathing UI, real profession preservation and actual third key preview complete");
                 done = true;
                 client.stop();
             }
