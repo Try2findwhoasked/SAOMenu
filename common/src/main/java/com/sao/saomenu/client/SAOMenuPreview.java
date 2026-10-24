@@ -45,6 +45,7 @@ public final class SAOMenuPreview {
     private static boolean langReloadDone = false;
     private static String weaponQuickBefore;
     private static boolean breathingInputVerified;
+    private static final long PREVIEW_STARTED_AT = System.currentTimeMillis();
 
     private SAOMenuPreview() {
     }
@@ -113,6 +114,10 @@ public final class SAOMenuPreview {
 
         if (Boolean.getBoolean("saomenu.bladePreview")) {
             if (BladeTimelinePreview.tick(client, out)) done = true;
+            return;
+        }
+        if (Boolean.getBoolean("saomenu.parityPreview")) {
+            parityPreview(client, out);
             return;
         }
         if (ticks % 100 == 0) SAOMenu.LOGGER.info("[SAOMenu] preview tick={} screen={} menu={}",
@@ -967,6 +972,156 @@ public final class SAOMenuPreview {
             } else if (menuTicks == 1800) {
                 done = true;
                 client.stop();
+            }
+        }
+    }
+
+    private static void parityPreview(Minecraft client, String out) {
+        if (client.player == null || client.level == null) return;
+        if (client.screen instanceof net.minecraft.client.gui.screens.PauseScreen) client.setScreen(null);
+        worldReadyTicks++;
+        try {
+            if (Boolean.getBoolean("saomenu.stylePreview") && worldReadyTicks >= 230) {
+                stylePreview(client, out, worldReadyTicks - 230);
+                return;
+            }
+            if (worldReadyTicks == 20) {
+                client.options.guiScale().set(3);
+                client.resizeDisplay();
+                Class.forName("cn.saomod.rewrite.platform.client.ClientCompanionEvents").getMethod("request").invoke(null);
+                client.setScreen((net.minecraft.client.gui.screens.Screen) Class.forName(
+                        "cn.saomod.rewrite.platform.client.CompanionCollectionScreen")
+                        .getConstructor(net.minecraft.client.gui.screens.Screen.class).newInstance(new Object[] {null}));
+            } else if (worldReadyTicks == 50) grab(client, out, "parity_collection_small.png");
+            else if (worldReadyTicks == 60) pressButton(client, "查看收服图鉴");
+            else if (worldReadyTicks == 85) grab(client, out, "parity_guide_small.png");
+            else if (worldReadyTicks == 95) clickScreen(client, client.getWindow().getGuiScaledWidth() / 2.0, 86, 0);
+            else if (worldReadyTicks == 120) grab(client, out, "parity_pet_guide.png");
+            else if (worldReadyTicks == 130) pressButton(client, "查看外观");
+            else if (worldReadyTicks == 155) grab(client, out, "parity_pet_preview.png");
+            else if (worldReadyTicks == 165) {
+                client.setScreen((net.minecraft.client.gui.screens.Screen) Class.forName(
+                        "cn.saomod.rewrite.platform.client.VisualSettingsScreen")
+                        .getConstructor(net.minecraft.client.gui.screens.Screen.class).newInstance(new Object[] {null}));
+            } else if (worldReadyTicks == 185) grab(client, out, "parity_visual_settings.png");
+            else if (worldReadyTicks == 195) {
+                Class.forName("cn.saomod.rewrite.platform.client.ClientHomeEvents").getMethod("request").invoke(null);
+                client.setScreen((net.minecraft.client.gui.screens.Screen) Class.forName(
+                        "cn.saomod.rewrite.platform.client.HomeScreen").getConstructor().newInstance());
+            } else if (worldReadyTicks == 220) grab(client, out, "parity_home_small.png");
+            else if (worldReadyTicks == 230) {
+                client.setScreen(null);
+                client.player.setYRot(0);
+                client.player.setXRot(12);
+                client.getSingleplayerServer().execute(() -> {
+                    var owner = client.getSingleplayerServer().getPlayerList().getPlayer(client.player.getUUID());
+                    owner.setYRot(0);
+                    var at = owner.position().add(0, 0, 4);
+                    try {
+                        var spawn = Class.forName("cn.saomod.rewrite.platform.forge.skill.ProfessionVisualEntities")
+                                .getMethod("spawn", net.minecraft.server.level.ServerPlayer.class, String.class, String.class,
+                                        int.class, float.class, net.minecraft.world.phys.Vec3.class,
+                                        net.minecraft.world.phys.Vec3.class, boolean.class);
+                        for (String model : new String[] {"json/shaman_model/totem_fire", "mage/cryo_prison_cage", "json/paladin_model/holy_chains"}) {
+                            double x = model.contains("shaman") ? -2 : model.contains("paladin") ? 2 : 0;
+                            var point = at.add(x, model.startsWith("json/") ? 1 : 0, 0);
+                            spawn.invoke(null, owner, model, model.contains("cage") ? "crystal_the_enemy" : "animation",
+                                    180, .7F, point, point, false);
+                        }
+                    } catch (ReflectiveOperationException failure) {
+                        SAOMenu.LOGGER.error("Support visual preview failed", failure);
+                    }
+                });
+            } else if (worldReadyTicks == 270) grab(client, out, "parity_support_models.png");
+            else if (worldReadyTicks == 280) { done = true; client.stop(); }
+        } catch (ReflectiveOperationException failure) {
+            SAOMenu.LOGGER.error("Parity preview failed", failure);
+            done = true;
+            client.stop();
+        }
+    }
+
+    private static void pressButton(Minecraft client, String label) {
+        if (client.screen == null) throw new IllegalStateException("Expected preview screen");
+        client.screen.children().stream().filter(net.minecraft.client.gui.components.Button.class::isInstance)
+                .map(net.minecraft.client.gui.components.Button.class::cast)
+                .filter(button -> button.getMessage().getString().equals(label)).findFirst().orElseThrow().onPress();
+    }
+
+    private static void stylePreview(Minecraft client, String out, int tick) throws ReflectiveOperationException {
+        String[] pages = {"RpgMenuScreen", "ProfessionBindingScreen", "WeaponSkillsScreen", "EquipmentScreen",
+                "PartyScreen", "FriendScreen", "QuestJournalScreen", "ProgressionScreen", "CrystalWaypointScreen",
+                "HomeAccessScreen", "EmoteScreen", "TradeScreen", "CommissionScreen", "DialogueScreen"};
+        String[] requests = {"RpgMenuEvents:refresh", "ClientProfessionEvents:requestSnapshot", "", "ClientEquipmentEvents:request",
+                "ClientPartyEvents:request", "ClientFriendEvents:request", "ClientQuestJournalEvents:request",
+                "ClientProgressionEvents:request", "ClientCrystalEvents:request", "ClientHomeEvents:request", "", "", "", ""};
+        int pass = tick / (35 * pages.length);
+        int index = tick / 35 % pages.length;
+        if (pass >= 2) {
+            for (String page : pages) for (String prefix : new String[] {"style_", "style_narrow_"}) {
+                File file = new File(out, prefix + page + ".png");
+                if (!file.isFile() || file.lastModified() < PREVIEW_STARTED_AT) {
+                    throw new IllegalStateException("Missing current style screenshot " + file);
+                }
+            }
+            try { Files.writeString(Path.of(out, "style-preview-result.txt"), "PASSED\n28 current page screenshots\nkeyboard editing and sixteen-option pagination passed\n"); }
+            catch (IOException failure) { throw new IllegalStateException("Cannot save style preview verification", failure); }
+            done = true; client.stop(); return;
+        }
+        if (pass == 1 && index == 0 && tick % 35 == 0) {
+            GLFW.glfwSetWindowSize(client.getWindow().getWindow(), 960, 720);
+            client.resizeDisplay();
+        }
+        if (tick % 35 == 0) {
+            if (pages[index].equals("WeaponSkillsScreen")) {
+                client.getSingleplayerServer().execute(() -> {
+                    var owner = client.getSingleplayerServer().getPlayerList().getPlayer(client.player.getUUID());
+                    owner.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(
+                            net.minecraft.core.registries.BuiltInRegistries.ITEM.get(new net.minecraft.resources.ResourceLocation("saomod_rewrite:elucidator"))));
+                });
+            }
+            if (!requests[index].isEmpty()) {
+                String[] request = requests[index].split(":");
+                Class.forName("cn.saomod.rewrite.platform.client." + request[0]).getMethod(request[1]).invoke(null);
+            }
+            if (pages[index].equals("DialogueScreen")) {
+                Class<?> identifier = Class.forName("cn.saomod.rewrite.shared.NamespacedId");
+                Object npc = identifier.getMethod("parse", String.class).invoke(null, "saomod_rewrite:preview_npc");
+                Class<?> message = Class.forName("cn.saomod.rewrite.infrastructure.network.DialogueViewMessage");
+                var choices = java.util.stream.IntStream.rangeClosed(1, 16).mapToObj(value -> "预览选项 " + value).toList();
+                Object view = message.getConstructor(identifier, boolean.class, String.class, String.class, java.util.List.class, String.class)
+                        .newInstance(npc, true, "preview", "对话排版预览：正文可滚动，十六个选项按窗口高度分页。".repeat(8), choices, "");
+                Class.forName("cn.saomod.rewrite.infrastructure.network.DialogueClientState").getMethod("accept", message).invoke(null, view);
+            }
+            Class<?> type = Class.forName("cn.saomod.rewrite.platform.client." + pages[index]);
+            net.minecraft.client.gui.screens.Screen screen;
+            try { screen = (net.minecraft.client.gui.screens.Screen) type.getConstructor().newInstance(); }
+            catch (NoSuchMethodException missing) {
+                screen = (net.minecraft.client.gui.screens.Screen) type.getConstructor(net.minecraft.client.gui.screens.Screen.class)
+                        .newInstance(new Object[] {null});
+            }
+            client.setScreen(screen);
+        } else if (tick % 35 == 12 && pages[index].equals("FriendScreen")) {
+            var box = client.screen.children().stream().filter(net.minecraft.client.gui.components.EditBox.class::isInstance)
+                    .map(net.minecraft.client.gui.components.EditBox.class::cast).findFirst().orElseThrow();
+            box.setValue("Player");
+            client.screen.setFocused(box);
+            box.setFocused(true);
+            client.screen.charTyped('_', 0);
+            if (!box.getValue().equals("Player_")) throw new IllegalStateException("Styled input lost keyboard editing");
+        } else if (tick % 35 == 14 && pages[index].equals("DialogueScreen")) {
+            for (int page = 0; page < 7; page++) pressButton(client, "下一页");
+            boolean last = client.screen.children().stream().filter(net.minecraft.client.gui.components.Button.class::isInstance)
+                    .map(net.minecraft.client.gui.components.Button.class::cast)
+                    .anyMatch(button -> button.getMessage().getString().equals("预览选项 16")
+                            && button.getY() + button.getHeight() < client.getWindow().getGuiScaledHeight() - 54);
+            if (!last) throw new IllegalStateException("Sixteen dialogue options are not reachable within the page");
+        } else if (tick % 35 == 24) grab(client, out, "style_" + (pass == 1 ? "narrow_" : "") + pages[index] + ".png");
+        else if (tick % 35 == 28 && pages[index].equals("DialogueScreen")) {
+            pressButton(client, "返回菜单");
+            Object state = Class.forName("cn.saomod.rewrite.infrastructure.network.DialogueClientState").getMethod("current").invoke(null);
+            if (state instanceof java.util.Optional<?> current && current.isPresent()) {
+                throw new IllegalStateException("Returning to the menu left a dialogue that would reopen");
             }
         }
     }
