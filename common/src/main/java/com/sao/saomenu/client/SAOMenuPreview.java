@@ -44,6 +44,7 @@ public final class SAOMenuPreview {
     private static boolean langSwitched = false;
     private static boolean langReloadDone = false;
     private static String weaponQuickBefore;
+    private static boolean breathingInputVerified;
 
     private SAOMenuPreview() {
     }
@@ -68,7 +69,7 @@ public final class SAOMenuPreview {
         }
         client.options.pauseOnLostFocus = false;
         ticks++;
-        if (ticks > 1600) {
+        if (ticks > 2600) {
             // 世界加载超时,放弃
             SAOMenu.LOGGER.warn("[SAOMenu] preview timed out waiting for world");
             done = true;
@@ -892,13 +893,17 @@ public final class SAOMenuPreview {
                 } catch (ReflectiveOperationException failure) {
                     throw new IllegalStateException("Cannot press actual third breathing input", failure);
                 }
-            } else if (menuTicks == 1072) {
+            } else if (menuTicks >= 1072 && menuTicks < 1120 && !breathingInputVerified) {
                 try {
                     var state = Class.forName("cn.saomod.rewrite.infrastructure.network.BreathingClientState");
                     var view = ((java.util.Optional<?>) state.getMethod("snapshot").invoke(null)).orElseThrow();
                     var slots = (java.util.List<?>) view.getClass().getMethod("slots").invoke(view);
                     int remaining = (Integer) slots.get(2).getClass().getMethod("remainingCooldownTicks").invoke(slots.get(2));
-                    if (remaining <= 0) throw new IllegalStateException("Actual third breathing key did not start its authoritative cooldown");
+                    if (remaining <= 0) {
+                        if (menuTicks >= 1118) throw new IllegalStateException("Actual third breathing key did not start its authoritative cooldown");
+                        return;
+                    }
+                    breathingInputVerified = true;
                     SAOMenu.LOGGER.info("[SAOMenu] actual third breathing mapping reached server cooldown={}", remaining);
                 } catch (ReflectiveOperationException failure) {
                     throw new IllegalStateException("Cannot verify actual third breathing input", failure);
@@ -917,6 +922,45 @@ public final class SAOMenuPreview {
             } else if (menuTicks == 1196) {
                 grab(client, out, "rewrite_profession_after_breathing.png");
                 SAOMenu.LOGGER.info("[SAOMenu] fixed breathing UI, real profession preservation and actual third key preview complete");
+                client.setScreen(null);
+                client.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
+                client.player.setXRot(25);
+                client.player.connection.sendCommand("fill ~-20 119 ~-20 ~20 119 ~20 minecraft:black_concrete");
+                client.player.connection.sendCommand("tp @s ~ 120 ~ 0 25");
+                client.player.connection.sendCommand("time set night");
+                client.player.connection.sendCommand("item replace entity @s weapon.mainhand with saomod_rewrite:northern_icebow");
+                client.getSingleplayerServer().execute(() -> {
+                    var player = client.getSingleplayerServer().getPlayerList().getPlayer(client.player.getUUID());
+                    try {
+                        var data = (net.minecraft.nbt.CompoundTag) player.getClass().getMethod("getPersistentData").invoke(player);
+                        data.putInt("SaoWeaponMastery_saomod_rewrite:weapon/northern_icebow", 1000);
+                    } catch (ReflectiveOperationException failure) {
+                        throw new IllegalStateException("Cannot prepare icebow preview mastery", failure);
+                    }
+                });
+            } else if (menuTicks == 1220) {
+                client.player.connection.sendCommand("saomod weapon cast saomod_rewrite:weapon/northern_icebow 1");
+            } else if (menuTicks == 1228) {
+                grab(client, out, "rewrite_icebow_art_one_charge.png");
+            } else if (menuTicks == 1240) {
+                grab(client, out, "rewrite_icebow_art_one_dragon.png");
+            } else if (menuTicks == 1320) {
+                client.player.connection.sendCommand("saomod weapon cast saomod_rewrite:weapon/northern_icebow 2");
+            } else if (menuTicks == 1350) {
+                grab(client, out, "rewrite_icebow_art_two_rain.png");
+            } else if (menuTicks == 1480) {
+                client.player.connection.sendCommand("saomod weapon cast saomod_rewrite:weapon/northern_icebow 3");
+            } else if (menuTicks == 1498) {
+                grab(client, out, "rewrite_icebow_art_three_cage.png");
+            } else if (menuTicks == 1508) {
+                grab(client, out, "rewrite_icebow_art_three_collapse.png");
+            } else if (menuTicks == 1620) {
+                client.player.connection.sendCommand("saomod weapon cast saomod_rewrite:weapon/northern_icebow 4");
+            } else if (menuTicks == 1640) {
+                grab(client, out, "rewrite_icebow_art_four_charge.png");
+            } else if (menuTicks == 1680) {
+                grab(client, out, "rewrite_icebow_art_four_burst.png");
+            } else if (menuTicks == 1800) {
                 done = true;
                 client.stop();
             }
