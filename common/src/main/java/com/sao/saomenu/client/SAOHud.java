@@ -468,6 +468,21 @@ public final class SAOHud {
         int w = Math.round(plateW(screenW) * 0.78f);
         float s = w / 360f;
         int yy = y;
+        if (SAORewriteBridge.installed()) {
+            for (var row : SAORewriteBridge.partyStatus()) {
+                if (!row.getBoolean("Online") || row.getUUID("Player").equals(self.getUUID())) continue;
+                float maximum = row.getFloat("MaxHealth");
+                float fraction = maximum <= 0 ? 0 : Mth.clamp(row.getFloat("Health") / maximum, 0, 1);
+                String dimension = row.getString("Dimension");
+                int colon = dimension.indexOf(':');
+                if (colon >= 0) dimension = dimension.substring(colon + 1);
+                String status = row.getBoolean("Downed") ? "[濒死]" : row.getDouble("Distance") < 0
+                        ? "[" + dimension + "]" : "[" + Math.round(row.getDouble("Distance")) + "m]";
+                renderCompactBar(g, x, yy, w, rowH, s, row.getString("Name") + " " + status, fraction);
+                yy += rowH + 2;
+            }
+            return;
+        }
         for (String name : com.sao.saomenu.party.SAOClientPartyState.teamMembers()) {
             if (name.equals(selfName)) {
                 continue;

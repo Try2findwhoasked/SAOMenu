@@ -42,6 +42,12 @@ public final class SAORewriteBridge {
         return result instanceof List<?> list ? List.copyOf((List<String>) list) : List.of();
     }
     public static List<String> partyNames() { return rows("partyNames"); }
+    public static List<net.minecraft.nbt.CompoundTag> partyStatus() {
+        Object result = call("partyStatus", new Class<?>[0]);
+        if (!(result instanceof List<?> list)) return List.of();
+        return list.stream().filter(net.minecraft.nbt.CompoundTag.class::isInstance)
+                .map(net.minecraft.nbt.CompoundTag.class::cast).limit(64).toList();
+    }
     public static List<String> friendNames() { return rows("friendNames"); }
     public static List<String> profileRows() { return rows("profileRows"); }
     public static boolean inParty() { return Boolean.TRUE.equals(call("inParty", new Class<?>[0])); }
