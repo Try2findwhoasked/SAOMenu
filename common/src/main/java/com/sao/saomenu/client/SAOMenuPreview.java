@@ -111,6 +111,10 @@ public final class SAOMenuPreview {
             return;
         }
 
+        if (Boolean.getBoolean("saomenu.bladePreview")) {
+            if (BladeTimelinePreview.tick(client, out)) done = true;
+            return;
+        }
         if (ticks % 100 == 0) SAOMenu.LOGGER.info("[SAOMenu] preview tick={} screen={} menu={}",
                 ticks, client.screen == null ? "null" : client.screen.getClass().getSimpleName(), menuTicks);
         if (!menuOpened) {
@@ -1046,7 +1050,7 @@ public final class SAOMenuPreview {
         }
     }
 
-    private static void grab(Minecraft client, String out, String name) {
+    static void grab(Minecraft client, String out, String name) {
         try (NativeImage image = Screenshot.takeScreenshot(client.getMainRenderTarget())) {
             Path dir = new File(out).toPath();
             Files.createDirectories(dir);
